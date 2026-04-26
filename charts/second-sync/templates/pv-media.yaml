@@ -9,7 +9,7 @@ spec:
   accessModes:
   - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
-  storageClassName: local-path
+  storageClassName: manual
   local:
     path: {{ .Values.mediaHostPath }}
   nodeAffinity:
@@ -32,4 +32,4 @@ spec:
     requests:
       storage: 10Ti
   volumeName: second-sync-media-pv
-  storageClassName: local-path
+  storageClassName: manual
