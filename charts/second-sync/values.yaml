@@ -17,7 +17,7 @@ ports:
   prowlarr: 30005
   bazarr: 30006
   jellyfin: 30007
-  transmissionPeer: 51413
+  transmissionPeer: 31413
 
 # Image Tags
 images:
