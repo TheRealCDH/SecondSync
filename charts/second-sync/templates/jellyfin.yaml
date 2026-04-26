@@ -12,7 +12,8 @@ spec:
       labels:
         app: jellyfin
     spec:
-      nodeName: {{ .Values.nodeName }}
+      nodeSelector:
+        kubernetes.io/hostname: {{ .Values.nodeName }}
       containers:
       - name: jellyfin
         image: {{ .Values.images.jellyfin }}
