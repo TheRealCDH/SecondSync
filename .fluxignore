@@ -1,0 +1,2 @@
+# Ignore the Helm charts directory so Flux doesn't try to apply them as raw manifests
+charts/
