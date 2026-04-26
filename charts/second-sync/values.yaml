@@ -1,2 +1,31 @@
-  # Trigger reconcile
-  reconcileTrigger: "1"
+# Global Settings
+nodeName: ripnix
+storageClass: zfs-localpv
+mediaHostPath: /MASS/Plex
+
+# VPN Settings (Mullvad)
+vpn:
+  # Tailscale and internal k3s subnets
+  localSubnets: "100.64.0.0/10,10.42.0.0/16"
+
+# NodePort Mapping
+ports:
+  overseerr: 30001
+  sonarr: 30002
+  radarr: 30003
+  transmission: 30004
+  prowlarr: 30005
+  bazarr: 30006
+  jellyfin: 30007
+  transmissionPeer: 31413
+
+# Image Tags
+images:
+  gluetun: qmcgaw/gluetun:latest
+  transmission: linuxserver/transmission:latest
+  sonarr: linuxserver/sonarr:latest
+  radarr: linuxserver/radarr:latest
+  prowlarr: linuxserver/prowlarr:latest
+  bazarr: linuxserver/bazarr:latest
+  overseerr: fallenbagel/jellyseerr:latest
+  jellyfin: jellyfin/jellyfin:latest
