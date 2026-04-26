@@ -28,5 +28,5 @@ images:
   radarr: linuxserver/radarr:latest
   prowlarr: linuxserver/prowlarr:latest
   bazarr: linuxserver/bazarr:latest
-  overseerr: sctx/overseerr:latest
+  overseerr: fallenbagel/jellyseerr:latest
   jellyfin: jellyfin/jellyfin:latest
