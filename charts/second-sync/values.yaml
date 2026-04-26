@@ -11,13 +11,13 @@ vpn:
 
 # NodePort Mapping
 ports:
-  overseerr: 30000
-  sonarr: 30001
-  radarr: 30002
-  transmission: 30003
-  prowlarr: 30004
-  bazarr: 30005
-  jellyfin: 30006
+  overseerr: 30001
+  sonarr: 30002
+  radarr: 30003
+  transmission: 30004
+  prowlarr: 30005
+  bazarr: 30006
+  jellyfin: 30007
   transmissionPeer: 51413
 
 # Image Tags
