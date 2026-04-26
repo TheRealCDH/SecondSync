@@ -22,7 +22,7 @@ spec:
         args:
           - |
             export WIREGUARD_PRIVATE_KEY=$(cat /etc/vpn/mull.key)
-            exec /gluetun/gluetun
+            exec /gluetun-entrypoint
         securityContext:
           capabilities:
             add: ["NET_ADMIN"]
