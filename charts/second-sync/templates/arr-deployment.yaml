@@ -21,7 +21,7 @@ spec:
         command: ["/bin/sh", "-c"]
         args:
           - |
-            export WIREGUARD_PRIVATE_KEY=$(cat /etc/vpn/mull.key)
+            export WIREGUARD_PRIVATE_KEY=$(cat /etc/vpn/mull.key | tr -d '\n\r ')
             exec /gluetun-entrypoint
         securityContext:
           capabilities:
@@ -32,6 +32,8 @@ spec:
           value: "mullvad"
         - name: VPN_TYPE
           value: "wireguard"
+        - name: WIREGUARD_ADDRESSES
+          value: "10.64.0.1/32"
         - name: FIREWALL_OUTBOUND_SUBNETS
           value: {{ .Values.vpn.localSubnets | quote }}
         - name: SERVER_COUNTRIES
