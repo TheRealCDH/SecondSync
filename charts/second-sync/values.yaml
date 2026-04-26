@@ -1,6 +1,6 @@
 # Global Settings
 nodeName: ripnix
-storageClass: zroot
+storageClass: zfs-localpv
 mediaHostPath: /MASS/Plex
 
 # VPN Settings (Mullvad)
