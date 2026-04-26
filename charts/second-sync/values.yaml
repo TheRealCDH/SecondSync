@@ -5,7 +5,6 @@ mediaHostPath: /MASS/Plex
 
 # VPN Settings (Mullvad)
 vpn:
-  secretName: mullvad-vpn
   # Tailscale and internal k3s subnets
   localSubnets: "100.64.0.0/10,10.42.0.0/16"
 

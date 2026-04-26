@@ -27,14 +27,14 @@ spec:
         - name: VPN_TYPE
           value: "wireguard"
         - name: WIREGUARD_PRIVATE_KEY_FILE
-          value: "/run/secrets/mull.key"
+          value: "/etc/vpn/mull.key"
         - name: FIREWALL_OUTBOUND_SUBNETS
           value: {{ .Values.vpn.localSubnets | quote }}
         - name: SERVER_COUNTRIES
           value: "Netherlands"
         volumeMounts:
         - name: vpn-key
-          mountPath: /run/secrets/mull.key
+          mountPath: /etc/vpn/mull.key
           readOnly: true
 
       # --- ARR APPS ---
