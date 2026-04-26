@@ -26,15 +26,16 @@ spec:
           value: "mullvad"
         - name: VPN_TYPE
           value: "wireguard"
-        - name: WIREGUARD_PRIVATE_KEY
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Values.vpn.secretName }}
-              key: WIREGUARD_PRIVATE_KEY
+        - name: WIREGUARD_PRIVATE_KEY_FILE
+          value: "/run/secrets/mull.key"
         - name: FIREWALL_OUTBOUND_SUBNETS
           value: {{ .Values.vpn.localSubnets | quote }}
         - name: SERVER_COUNTRIES
           value: "Netherlands"
+        volumeMounts:
+        - name: vpn-key
+          mountPath: /run/secrets/mull.key
+          readOnly: true
 
       # --- ARR APPS ---
       - name: transmission
@@ -89,6 +90,10 @@ spec:
           mountPath: /config
 
       volumes:
+      - name: vpn-key
+        hostPath:
+          path: /root/mull.key
+          type: File
       - name: media
         persistentVolumeClaim:
           claimName: second-sync-media-pvc
