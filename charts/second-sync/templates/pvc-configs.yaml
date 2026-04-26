@@ -1,0 +1,15 @@
+{{- $apps := list "sonarr" "radarr" "transmission" "prowlarr" "bazarr" "overseerr" "jellyfin" -}}
+{{- range $app := $apps }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $app }}-config-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ $.Values.storageClass }}
+  resources:
+    requests:
+      storage: 5Gi
+---
+{{- end }}

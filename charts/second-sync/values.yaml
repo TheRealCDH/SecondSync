@@ -1,0 +1,32 @@
+# Global Settings
+nodeName: ripnix
+storageClass: zroot
+mediaHostPath: /MASS/Plex
+
+# VPN Settings (Mullvad)
+vpn:
+  secretName: mullvad-vpn
+  # Tailscale and internal k3s subnets
+  localSubnets: "100.64.0.0/10,10.42.0.0/16"
+
+# NodePort Mapping
+ports:
+  overseerr: 30000
+  sonarr: 30001
+  radarr: 30002
+  transmission: 30003
+  prowlarr: 30004
+  bazarr: 30005
+  jellyfin: 30006
+  transmissionPeer: 51413
+
+# Image Tags
+images:
+  gluetun: qmcgaw/gluetun:latest
+  transmission: linuxserver/transmission:latest
+  sonarr: linuxserver/sonarr:latest
+  radarr: linuxserver/radarr:latest
+  prowlarr: linuxserver/prowlarr:latest
+  bazarr: linuxserver/bazarr:latest
+  overseerr: sctx/overseerr:latest
+  jellyfin: jellyfin/jellyfin:latest

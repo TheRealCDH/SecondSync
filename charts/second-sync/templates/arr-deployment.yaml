@@ -1,0 +1,111 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: arr-stack
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: arr-stack
+  template:
+    metadata:
+      labels:
+        app: arr-stack
+    spec:
+      nodeName: {{ .Values.nodeName }}
+      containers:
+      # --- VPN GATEWAY ---
+      - name: gluetun
+        image: {{ .Values.images.gluetun }}
+        securityContext:
+          capabilities:
+            add: ["NET_ADMIN"]
+        env:
+        - name: VPN_SERVICE_PROVIDER
+          value: "mullvad"
+        - name: VPN_TYPE
+          value: "wireguard"
+        - name: WIREGUARD_PRIVATE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.vpn.secretName }}
+              key: WIREGUARD_PRIVATE_KEY
+        - name: FIREWALL_OUTBOUND_SUBNETS
+          value: {{ .Values.vpn.localSubnets | quote }}
+        - name: SERVER_COUNTRIES
+          value: "Netherlands"
+
+      # --- ARR APPS ---
+      - name: transmission
+        image: {{ .Values.images.transmission }}
+        env:
+        - name: PUID
+          value: "1000"
+        - name: PGID
+          value: "1000"
+        - name: TZ
+          value: "UTC"
+        volumeMounts:
+        - name: config-transmission
+          mountPath: /config
+        - name: media
+          mountPath: /media
+
+      - name: sonarr
+        image: {{ .Values.images.sonarr }}
+        volumeMounts:
+        - name: config-sonarr
+          mountPath: /config
+        - name: media
+          mountPath: /media
+
+      - name: radarr
+        image: {{ .Values.images.radarr }}
+        volumeMounts:
+        - name: config-radarr
+          mountPath: /config
+        - name: media
+          mountPath: /media
+
+      - name: prowlarr
+        image: {{ .Values.images.prowlarr }}
+        volumeMounts:
+        - name: config-prowlarr
+          mountPath: /config
+
+      - name: bazarr
+        image: {{ .Values.images.bazarr }}
+        volumeMounts:
+        - name: config-bazarr
+          mountPath: /config
+        - name: media
+          mountPath: /media
+
+      - name: overseerr
+        image: {{ .Values.images.overseerr }}
+        volumeMounts:
+        - name: config-overseerr
+          mountPath: /config
+
+      volumes:
+      - name: media
+        persistentVolumeClaim:
+          claimName: second-sync-media-pvc
+      - name: config-sonarr
+        persistentVolumeClaim:
+          claimName: sonarr-config-pvc
+      - name: config-radarr
+        persistentVolumeClaim:
+          claimName: radarr-config-pvc
+      - name: config-transmission
+        persistentVolumeClaim:
+          claimName: transmission-config-pvc
+      - name: config-prowlarr
+        persistentVolumeClaim:
+          claimName: prowlarr-config-pvc
+      - name: config-bazarr
+        persistentVolumeClaim:
+          claimName: bazarr-config-pvc
+      - name: config-overseerr
+        persistentVolumeClaim:
+          claimName: overseerr-config-pvc

@@ -1,0 +1,17 @@
+apiVersion: helm.toolkit.fluxcd.io/v2beta1
+kind: HelmRelease
+metadata:
+  name: second-sync
+  namespace: flux-system
+spec:
+  interval: 5m
+  chart:
+    spec:
+      chart: ./charts/second-sync
+      sourceRef:
+        kind: GitRepository
+        name: second-sync
+        namespace: flux-system
+  values:
+    # Overrides can be placed here if needed
+    nodeName: ripnix
