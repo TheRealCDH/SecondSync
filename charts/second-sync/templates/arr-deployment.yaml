@@ -250,6 +250,11 @@ spec:
           mountPath: /run/scripts
         - name: config-overseerr
           mountPath: /jellyseerr
+        - name: config-arm
+          mountPath: /arm-config
+          subPath: config
+        - name: media
+          mountPath: /home/arm/media
 
       volumes:
       - name: shared-keys
