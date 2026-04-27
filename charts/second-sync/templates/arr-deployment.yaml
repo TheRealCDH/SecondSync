@@ -33,7 +33,7 @@ spec:
         - name: VPN_TYPE
           value: "wireguard"
         - name: WIREGUARD_ADDRESSES
-          value: "10.64.0.1/32"
+          value: "10.72.231.112/32"
         - name: FIREWALL_OUTBOUND_SUBNETS
           value: {{ .Values.vpn.localSubnets | quote }}
         - name: SERVER_COUNTRIES
