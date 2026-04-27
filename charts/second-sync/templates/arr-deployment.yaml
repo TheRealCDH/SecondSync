@@ -325,12 +325,11 @@ spec:
                 -d "{
                   \"name\": \"FlareSolverr-Global\",
                   \"enabled\": true,
-                  \"implementation\": \"HttpProxy\",
-                  \"configContract\": \"HttpProxySettings\",
+                  \"implementation\": \"Http\",
+                  \"configContract\": \"HttpSettings\",
                   \"fields\": [
                     {\"name\": \"host\", \"value\": \"localhost\"},
-                    {\"name\": \"port\", \"value\": 8118},
-                    {\"name\": \"bypassList\", \"value\": \"localhost,127.0.0.1,10.0.0.0/8,100.64.0.0/10\"}
+                    {\"name\": \"port\", \"value\": 8118}
                   ]
                 }"
             fi
