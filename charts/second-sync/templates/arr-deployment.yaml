@@ -218,30 +218,31 @@ spec:
             PASSWORD=$(cat /run/shared/password)
 
             # --- TRANSPARENT FLARESOLVERR PROXY ---
-            # Simplified python script to avoid indentation hell in YAML
             cat <<'EOF' > /tmp/proxy.py
-import http.server, socketserver, requests, json
-FLARESOLVERR_URL = "http://localhost:8191/v1"
-PORT = 8118
-class FlareProxy(http.server.BaseHTTPRequestHandler):
-    def do_GET(self): self.handle_request("get")
-    def do_POST(self): self.handle_request("post")
-    def handle_request(self, method):
-        payload = {"cmd": f"request.{method}", "url": self.path, "maxTimeout": 60000}
-        try:
-            resp = requests.post(FLARESOLVERR_URL, json=payload, timeout=70)
-            data = resp.json()
-            if data.get("status") == "ok":
-                self.send_response(200)
-                self.send_header("Content-Type", "text/html")
-                self.end_headers()
-                self.wfile.write(data.get("solution", {}).get("response", "").encode())
-            else:
-                self.send_error(502, f"FlareSolverr Error: {data.get('message')}")
-        except Exception as e: self.send_error(500, str(e))
-with socketserver.TCPServer(("", PORT), FlareProxy) as httpd:
-    httpd.serve_forever()
-EOF
+            import http.server, socketserver, requests, json
+            FLARESOLVERR_URL = "http://localhost:8191/v1"
+            PORT = 8118
+            class FlareProxy(http.server.BaseHTTPRequestHandler):
+                def do_GET(self): self.handle_request("get")
+                def do_POST(self): self.handle_request("post")
+                def handle_request(self, method):
+                    payload = {"cmd": f"request.{method}", "url": self.path, "maxTimeout": 60000}
+                    try:
+                        resp = requests.post(FLARESOLVERR_URL, json=payload, timeout=70)
+                        data = resp.json()
+                        if data.get("status") == "ok":
+                            self.send_response(200)
+                            self.send_header("Content-Type", "text/html")
+                            self.end_headers()
+                            self.wfile.write(data.get("solution", {}).get("response", "").encode())
+                        else:
+                            self.send_error(502, f"FlareSolverr Error: {data.get('message')}")
+                    except Exception as e: self.send_error(500, str(e))
+            with socketserver.TCPServer(("", PORT), FlareProxy) as httpd:
+                httpd.serve_forever()
+            EOF
+            # Clean up indentation in the file
+            sed -i 's/^            //' /tmp/proxy.py
             python3 /tmp/proxy.py &
             
             # Wait for all services to be ready
