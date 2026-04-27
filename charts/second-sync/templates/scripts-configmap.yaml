@@ -62,17 +62,24 @@ data:
     echo "All services up. Linking..."
 
     # 1. Prowlarr -> Radarr/Sonarr
-    # We set syncLevel: fullSync at the top level
-    if ! curl -s "http://localhost:9696/api/v1/applications?apikey=$API_KEY" | jq -e ".[] | select(.name == \"Radarr\")" > /dev/null; then
-      echo "Adding Radarr to Prowlarr..."
-      curl -s -X POST "http://localhost:9696/api/v1/applications?apikey=$API_KEY" -H "Content-Type: application/json" \
-        -d "{\"name\": \"Radarr\", \"enabled\": true, \"syncLevel\": \"fullSync\", \"configContract\": \"RadarrSettings\", \"implementation\": \"Radarr\", \"fields\": [{\"name\": \"baseUrl\", \"value\": \"http://localhost:7878\"}, {\"name\": \"apiKey\", \"value\": \"$API_KEY\"}]}"
-    fi
-    if ! curl -s "http://localhost:9696/api/v1/applications?apikey=$API_KEY" | jq -e ".[] | select(.name == \"Sonarr\")" > /dev/null; then
-      echo "Adding Sonarr to Prowlarr..."
-      curl -s -X POST "http://localhost:9696/api/v1/applications?apikey=$API_KEY" -H "Content-Type: application/json" \
-        -d "{\"name\": \"Sonarr\", \"enabled\": true, \"syncLevel\": \"fullSync\", \"configContract\": \"SonarrSettings\", \"implementation\": \"Sonarr\", \"fields\": [{\"name\": \"baseUrl\", \"value\": \"http://localhost:8989\"}, {\"name\": \"apiKey\", \"value\": \"$API_KEY\"}]}"
-    fi
+    for APP in "Radarr:7878:RadarrSettings" "Sonarr:8989:SonarrSettings"; do
+      NAME=$(echo $APP | cut -d: -f1)
+      PORT=$(echo $APP | cut -d: -f2)
+      CONTRACT=$(echo $APP | cut -d: -f3)
+      
+      EXISTING=$(curl -s "http://localhost:9696/api/v1/applications?apikey=$API_KEY" | jq -c ".[] | select(.name == \"$NAME\")")
+      if [ -z "$EXISTING" ]; then
+        echo "Adding $NAME to Prowlarr..."
+        curl -s -X POST "http://localhost:9696/api/v1/applications?apikey=$API_KEY" -H "Content-Type: application/json" \
+          -d "{\"name\": \"$NAME\", \"enabled\": true, \"syncLevel\": \"fullSync\", \"configContract\": \"$CONTRACT\", \"implementation\": \"$NAME\", \"fields\": [{\"name\": \"baseUrl\", \"value\": \"http://localhost:$PORT\"}, {\"name\": \"apiKey\", \"value\": \"$API_KEY\"}]}"
+      else
+        echo "Updating $NAME in Prowlarr to ensure syncLevel is fullSync..."
+        ID=$(echo $EXISTING | jq -r .id)
+        # Preserve existing fields but force syncLevel
+        UPDATED=$(echo $EXISTING | jq -c ".syncLevel = \"fullSync\"")
+        curl -s -X PUT "http://localhost:9696/api/v1/applications/$ID?apikey=$API_KEY" -H "Content-Type: application/json" -d "$UPDATED"
+      fi
+    done
 
     # 2. Radarr/Sonarr -> Transmission
     for PORT in 7878 8989; do
@@ -95,12 +102,14 @@ data:
 
     # 4. Prowlarr -> FlareSolverr
     if ! curl -s "http://localhost:9696/api/v1/indexerproxy?apikey=$API_KEY" | jq -e ".[] | select(.name == \"FlareSolverr\")" > /dev/null; then
+      echo "Adding FlareSolverr API to Prowlarr..."
       curl -s -X POST "http://localhost:9696/api/v1/indexerproxy?apikey=$API_KEY" -H "Content-Type: application/json" \
         -d "{\"name\": \"FlareSolverr\", \"enabled\": true, \"implementation\": \"FlareSolverr\", \"configContract\": \"FlareSolverrSettings\", \"fields\": [{\"name\": \"host\", \"value\": \"http://localhost:8191\"}, {\"name\": \"requestTimeout\", \"value\": 60}]}"
     fi
 
     # 5. Global HTTP Proxy
     if ! curl -s "http://localhost:9696/api/v1/indexerproxy?apikey=$API_KEY" | jq -e ".[] | select(.name == \"FlareSolverr-Global\")" > /dev/null; then
+      echo "Adding FlareSolverr-Global HTTP Proxy..."
       curl -s -X POST "http://localhost:9696/api/v1/indexerproxy?apikey=$API_KEY" -H "Content-Type: application/json" \
         -d "{\"name\": \"FlareSolverr-Global\", \"enabled\": true, \"implementation\": \"Http\", \"configContract\": \"HttpSettings\", \"fields\": [{\"name\": \"host\", \"value\": \"localhost\"}, {\"name\": \"port\", \"value\": 8118}]}"
     fi
