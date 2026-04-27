@@ -214,7 +214,7 @@ spec:
             export HOMEPAGE_VAR_API_KEY=$(cat /run/shared/api_key)
             export HOMEPAGE_VAR_TR_USER={{ .Values.transmission.username | quote }}
             export HOMEPAGE_VAR_TR_PASS={{ .Values.transmission.password | quote }}
-            export HOMEPAGE_ALLOWED_HOSTS="{{ .Values.tailscaleIP }},{{ .Values.tailscaleIP }}:{{ .Values.ports.homepage }},ripnix,ripnix:{{ .Values.ports.homepage }},ripnix.tailscale.net,ripnix.tailscale.net:{{ .Values.ports.homepage }},localhost,127.0.0.1"
+            export HOMEPAGE_ALLOWED_HOSTS="{{ .Values.tailscaleIP }},{{ .Values.tailscaleIP }}:{{ .Values.ports.homepage }},ripnix,ripnix:{{ .Values.ports.homepage }},ripnix.therealcdh.github,ripnix.therealcdh.github:{{ .Values.ports.homepage }},ripnix.therealcdh.github.ts.net,ripnix.therealcdh.github.ts.net:{{ .Values.ports.homepage }},localhost,127.0.0.1"
             exec /usr/local/bin/node server.js
         volumeMounts:
         - name: shared-keys
