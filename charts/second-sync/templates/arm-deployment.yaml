@@ -14,6 +14,7 @@ spec:
     spec:
       nodeSelector:
         kubernetes.io/hostname: {{ .Values.nodeName }}
+      shareProcessNamespace: true
       initContainers:
       - name: arm-permissions
         image: alpine
@@ -56,7 +57,7 @@ spec:
             sed -i 's/job_length.seconds/getattr(job_length, "seconds", 0)/g' /opt/arm/arm/ripper/main.py
             sed -i 's/job_length.days/getattr(job_length, "days", 0)/g' /opt/arm/arm/ripper/main.py
             # Start the original entrypoint
-            exec /init
+            exec /sbin/my_init
         securityContext:
           privileged: true
         env:
