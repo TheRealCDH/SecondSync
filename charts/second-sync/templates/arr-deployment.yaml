@@ -267,8 +267,29 @@ spec:
             if ! curl -s "http://localhost:9696/api/v1/indexerproxy?apikey=$API_KEY" | jq -e ".[] | select(.name == \"FlareSolverr\")" > /dev/null; then
               echo "Adding FlareSolverr to Prowlarr..."
               curl -s -X POST "http://localhost:9696/api/v1/indexerproxy?apikey=$API_KEY" -H "Content-Type: application/json" \
-                -d "{\"name\": \"FlareSolverr\", \"implementation\": \"FlareSolverr\", \"configContract\": \"FlareSolverrSettings\", \"fields\": [{\"name\": \"host\", \"value\": \"http://localhost:8191\"}, {\"name\": \"requestTimeout\", \"value\": 60}]}"
+                -d "{\"name\": \"FlareSolverr\", \"enabled\": true, \"implementation\": \"FlareSolverr\", \"configContract\": \"FlareSolverrSettings\", \"fields\": [{\"name\": \"host\", \"value\": \"http://localhost:8191\"}, {\"name\": \"requestTimeout\", \"value\": 60}]}"
             fi
+
+            # 6. Auto-tag Indexers for FlareSolverr
+            echo "Tagging all indexers for FlareSolverr..."
+            # Create tag if not exists
+            TAG_ID=$(curl -s "http://localhost:9696/api/v1/tag?apikey=$API_KEY" | jq -r ".[] | select(.label == \"flaresolverr\") | .id")
+            if [ -z "$TAG_ID" ]; then
+              TAG_ID=$(curl -s -X POST "http://localhost:9696/api/v1/tag?apikey=$API_KEY" -H "Content-Type: application/json" -d "{\"label\": \"flaresolverr\"}" | jq -r ".id")
+            fi
+            
+            # Apply tag to FlareSolverr proxy
+            PROXY_ID=$(curl -s "http://localhost:9696/api/v1/indexerproxy?apikey=$API_KEY" | jq -r ".[] | select(.name == \"FlareSolverr\") | .id")
+            curl -s -X PUT "http://localhost:9696/api/v1/indexerproxy/$PROXY_ID?apikey=$API_KEY" -H "Content-Type: application/json" \
+              $(curl -s "http://localhost:9696/api/v1/indexerproxy/$PROXY_ID?apikey=$API_KEY" | jq -c ".tags = [$TAG_ID]") > /dev/null
+
+            # Apply tag to all indexers (The "Automatic" part)
+            INDEXERS=$(curl -s "http://localhost:9696/api/v1/indexer?apikey=$API_KEY" | jq -r ".[] | .id")
+            for ID in $INDEXERS; do
+              echo "Applying flaresolverr tag to indexer $ID..."
+              curl -s -X PUT "http://localhost:9696/api/v1/indexer/$ID?apikey=$API_KEY" -H "Content-Type: application/json" \
+                $(curl -s "http://localhost:9696/api/v1/indexer/$ID?apikey=$API_KEY" | jq -c ".tags = (.tags + [$TAG_ID] | unique)") > /dev/null
+            done
 
             echo "Linking complete. Sidecar sleeping."
             sleep infinity
