@@ -41,6 +41,9 @@ spec:
         - name: WIREGUARD_ADDRESSES
           value: "10.68.25.24/32"
         - name: FIREWALL_OUTBOUND_SUBNETS
+          value: {{ .Values.vpn.localSubnets | quote }}
+        - name: FIREWALL_INPUT_PORTS
+          value: "5055,8989,7878,9091,51413,9696,6767"
         volumeMounts:
         - name: vpn-key
           mountPath: /etc/vpn/mull.key

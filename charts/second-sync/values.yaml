@@ -6,7 +6,7 @@ mediaHostPath: /MASS/Plex
 # VPN Settings (Mullvad)
 vpn:
   # Tailscale and internal k3s subnets
-  localSubnets: "100.64.0.0/10,10.42.0.0/16"
+  localSubnets: "100.64.0.0/10,10.42.0.0/16,10.43.0.0/16,192.168.2.0/24"
 
 # NodePort Mapping
 ports:
