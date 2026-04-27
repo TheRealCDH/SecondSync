@@ -14,6 +14,38 @@ spec:
     spec:
       nodeSelector:
         kubernetes.io/hostname: {{ .Values.nodeName }}
+      initContainers:
+      - name: key-derivator
+        image: alpine
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            apk add --no-cache jq
+            # Derive a 32-char hex string from the Wireguard key
+            RAW_KEY=$(cat /etc/vpn/mull.key | tr -d '\n\r ')
+            echo "$RAW_KEY" | sha256sum | cut -c1-32 > /run/shared/api_key
+            # Derive a 16-char password
+            echo "$RAW_KEY" | sha256sum | cut -c1-16 > /run/shared/password
+            
+            API_KEY=$(cat /run/shared/api_key)
+            echo "Derived deterministic API Key: $API_KEY"
+
+            # Patch Jellyseerr config
+            CONFIG_FILE="/jellyseerr/settings.json"
+            if [ ! -f "$CONFIG_FILE" ]; then
+              echo '{"main":{}}' > "$CONFIG_FILE"
+            fi
+            TMP_FILE=$(mktemp)
+            jq --arg key "$API_KEY" '.main.apiKey = $key' "$CONFIG_FILE" > "$TMP_FILE" && mv "$TMP_FILE" "$CONFIG_FILE"
+            echo "Jellyseerr API key patched."
+        volumeMounts:
+        - name: vpn-key
+          mountPath: /etc/vpn/mull.key
+          readOnly: true
+        - name: shared-keys
+          mountPath: /run/shared
+        - name: config-overseerr
+          mountPath: /jellyseerr
       containers:
       # --- VPN GATEWAY ---
       - name: gluetun
@@ -52,6 +84,12 @@ spec:
       # --- ARR APPS ---
       - name: transmission
         image: {{ .Values.images.transmission }}
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            export USER=admin
+            export PASS=$(cat /run/shared/password)
+            exec /init
         env:
         - name: PUID
           value: "1000"
@@ -60,6 +98,9 @@ spec:
         - name: TZ
           value: "UTC"
         volumeMounts:
+        - name: shared-keys
+          mountPath: /run/shared
+          readOnly: true
         - name: config-transmission
           mountPath: /config
         - name: media
@@ -67,12 +108,21 @@ spec:
 
       - name: sonarr
         image: {{ .Values.images.sonarr }}
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            export SONARR__AUTH__APIKEY=$(cat /run/shared/api_key)
+            export SONARR__AUTH__METHOD=External
+            exec /init
         env:
         - name: PUID
           value: "1000"
         - name: PGID
           value: "1000"
         volumeMounts:
+        - name: shared-keys
+          mountPath: /run/shared
+          readOnly: true
         - name: config-sonarr
           mountPath: /config
         - name: media
@@ -82,12 +132,21 @@ spec:
 
       - name: radarr
         image: {{ .Values.images.radarr }}
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            export RADARR__AUTH__APIKEY=$(cat /run/shared/api_key)
+            export RADARR__AUTH__METHOD=External
+            exec /init
         env:
         - name: PUID
           value: "1000"
         - name: PGID
           value: "1000"
         volumeMounts:
+        - name: shared-keys
+          mountPath: /run/shared
+          readOnly: true
         - name: config-radarr
           mountPath: /config
         - name: media
@@ -97,23 +156,40 @@ spec:
 
       - name: prowlarr
         image: {{ .Values.images.prowlarr }}
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            export PROWLARR__AUTH__APIKEY=$(cat /run/shared/api_key)
+            export PROWLARR__AUTH__METHOD=External
+            exec /init
         env:
         - name: PUID
           value: "1000"
         - name: PGID
           value: "1000"
         volumeMounts:
+        - name: shared-keys
+          mountPath: /run/shared
+          readOnly: true
         - name: config-prowlarr
           mountPath: /config
 
       - name: bazarr
         image: {{ .Values.images.bazarr }}
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            export BAZARR__AUTH__APIKEY=$(cat /run/shared/api_key)
+            exec /init
         env:
         - name: PUID
           value: "1000"
         - name: PGID
           value: "1000"
         volumeMounts:
+        - name: shared-keys
+          mountPath: /run/shared
+          readOnly: true
         - name: config-bazarr
           mountPath: /config
         - name: media
@@ -132,7 +208,63 @@ spec:
         - name: config-overseerr
           mountPath: /app/config
 
+      # --- AUTO-LINKER SIDE CAR ---
+      - name: arr-linker
+        image: alpine
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            apk add --no-cache curl jq
+            API_KEY=$(cat /run/shared/api_key)
+            PASSWORD=$(cat /run/shared/password)
+
+            # Wait for all services to be ready
+            echo "Waiting for stack to wake up..."
+            until curl -s "http://localhost:9696/api/v1/system/status?apikey=$API_KEY" | grep -q "version"; do sleep 5; done
+            until curl -s "http://localhost:7878/api/v3/system/status?apikey=$API_KEY" | grep -q "version"; do sleep 5; done
+            until curl -s "http://localhost:8989/api/v3/system/status?apikey=$API_KEY" | grep -q "version"; do sleep 5; done
+            # until curl -s "http://localhost:5055/api/v1/status" | grep -q "version"; do sleep 5; done
+
+            echo "All services up. Linking..."
+
+            # 1. Prowlarr -> Radarr
+            if ! curl -s "http://localhost:9696/api/v1/applications?apikey=$API_KEY" | jq -e ".[] | select(.name == \"Radarr\")" > /dev/null; then
+              echo "Adding Radarr to Prowlarr..."
+              curl -s -X POST "http://localhost:9696/api/v1/applications?apikey=$API_KEY" -H "Content-Type: application/json" \
+                -d "{\"name\": \"Radarr\", \"configContract\": \"RadarrSettings\", \"implementation\": \"Radarr\", \"fields\": [{\"name\": \"baseUrl\", \"value\": \"http://localhost:7878\"}, {\"name\": \"apiKey\", \"value\": \"$API_KEY\"}, {\"name\": \"syncLevel\", \"value\": \"fullSync\"}]}"
+            fi
+
+            # 2. Prowlarr -> Sonarr
+            if ! curl -s "http://localhost:9696/api/v1/applications?apikey=$API_KEY" | jq -e ".[] | select(.name == \"Sonarr\")" > /dev/null; then
+              echo "Adding Sonarr to Prowlarr..."
+              curl -s -X POST "http://localhost:9696/api/v1/applications?apikey=$API_KEY" -H "Content-Type: application/json" \
+                -d "{\"name\": \"Sonarr\", \"configContract\": \"SonarrSettings\", \"implementation\": \"Sonarr\", \"fields\": [{\"name\": \"baseUrl\", \"value\": \"http://localhost:8989\"}, {\"name\": \"apiKey\", \"value\": \"$API_KEY\"}, {\"name\": \"syncLevel\", \"value\": \"fullSync\"}]}"
+            fi
+
+            # 3. Radarr -> Transmission
+            if ! curl -s "http://localhost:7878/api/v3/downloadclient?apikey=$API_KEY" | jq -e ".[] | select(.name == \"Transmission\")" > /dev/null; then
+              echo "Adding Transmission to Radarr..."
+              curl -s -X POST "http://localhost:7878/api/v3/downloadclient?apikey=$API_KEY" -H "Content-Type: application/json" \
+                -d "{\"name\": \"Transmission\", \"implementation\": \"Transmission\", \"configContract\": \"TransmissionSettings\", \"fields\": [{\"name\": \"host\", \"value\": \"localhost\"}, {\"name\": \"port\", \"value\": 9091}, {\"name\": \"username\", \"value\": \"admin\"}, {\"name\": \"password\", \"value\": \"$PASSWORD\"}]}"
+            fi
+
+            # 4. Sonarr -> Transmission
+            if ! curl -s "http://localhost:8989/api/v3/downloadclient?apikey=$API_KEY" | jq -e ".[] | select(.name == \"Transmission\")" > /dev/null; then
+              echo "Adding Transmission to Sonarr..."
+              curl -s -X POST "http://localhost:8989/api/v3/downloadclient?apikey=$API_KEY" -H "Content-Type: application/json" \
+                -d "{\"name\": \"Transmission\", \"implementation\": \"Transmission\", \"configContract\": \"TransmissionSettings\", \"fields\": [{\"name\": \"host\", \"value\": \"localhost\"}, {\"name\": \"port\", \"value\": 9091}, {\"name\": \"username\", \"value\": \"admin\"}, {\"name\": \"password\", \"value\": \"$PASSWORD\"}]}"
+            fi
+
+            echo "Linking complete. Sidecar sleeping."
+            sleep infinity
+        volumeMounts:
+        - name: shared-keys
+          mountPath: /run/shared
+          readOnly: true
+
       volumes:
+      - name: shared-keys
+        emptyDir: {}
       - name: vpn-key
         hostPath:
           path: /root/mull.key
