@@ -13,6 +13,6 @@ spec:
   storageClassName: {{ $.Values.storageClass }}
   resources:
     requests:
-      storage: 5Gi
+      storage: 20Gi
 ---
 {{- end }}

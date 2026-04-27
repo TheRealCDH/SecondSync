@@ -29,6 +29,8 @@ spec:
         volumeMounts:
         - name: config-jellyfin
           mountPath: /config
+        - name: jellyfin-cache
+          mountPath: /cache
         - name: media
           mountPath: /media
           readOnly: true
@@ -39,3 +41,5 @@ spec:
       - name: config-jellyfin
         persistentVolumeClaim:
           claimName: jellyfin-config-pvc
+      - name: jellyfin-cache
+        emptyDir: {}
