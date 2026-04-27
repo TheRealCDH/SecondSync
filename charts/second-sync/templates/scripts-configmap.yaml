@@ -28,6 +28,7 @@ data:
     while True:
         try:
             with socketserver.TCPServer(("", PORT), FlareProxy) as httpd:
+                httpd.allow_reuse_address = True
                 httpd.serve_forever()
         except Exception as e:
             print(f"Proxy crashed: {e}. Restarting in 5s...")
@@ -90,7 +91,7 @@ data:
         -d "{\"name\": \"FlareSolverr\", \"enabled\": true, \"implementation\": \"FlareSolverr\", \"configContract\": \"FlareSolverrSettings\", \"fields\": [{\"name\": \"host\", \"value\": \"http://localhost:8191\"}, {\"name\": \"requestTimeout\", \"value\": 60}]}"
     fi
 
-    # 7. Global HTTP Proxy (The \"Manual Routing\" Fix)
+    # 7. Global HTTP Proxy
     if ! curl -s "http://localhost:9696/api/v1/indexerproxy?apikey=$API_KEY" | jq -e ".[] | select(.name == \"FlareSolverr-Global\")" > /dev/null; then
       echo "Adding FlareSolverr-Global HTTP Proxy..."
       curl -s -X POST "http://localhost:9696/api/v1/indexerproxy?apikey=$API_KEY" -H "Content-Type: application/json" \
