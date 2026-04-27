@@ -34,7 +34,7 @@ data:
             widget:
               type: jellyseerr
               url: http://localhost:5055
-              key: {{HOMEPAGE_VAR_API_KEY}}
+              key: {{ "{{" }}HOMEPAGE_VAR_API_KEY{{ "}}" }}
         - Prowlarr:
             icon: prowlarr.png
             href: http://100.67.54.105:30005
@@ -42,7 +42,7 @@ data:
             widget:
               type: prowlarr
               url: http://localhost:9696
-              key: {{HOMEPAGE_VAR_API_KEY}}
+              key: {{ "{{" }}HOMEPAGE_VAR_API_KEY{{ "}}" }}
 
     - Media:
         - Jellyfin:
@@ -60,7 +60,7 @@ data:
             widget:
               type: sonarr
               url: http://localhost:8989
-              key: {{HOMEPAGE_VAR_API_KEY}}
+              key: {{ "{{" }}HOMEPAGE_VAR_API_KEY{{ "}}" }}
         - Radarr:
             icon: radarr.png
             href: http://100.67.54.105:30003
@@ -68,7 +68,7 @@ data:
             widget:
               type: radarr
               url: http://localhost:7878
-              key: {{HOMEPAGE_VAR_API_KEY}}
+              key: {{ "{{" }}HOMEPAGE_VAR_API_KEY{{ "}}" }}
         - Bazarr:
             icon: bazarr.png
             href: http://100.67.54.105:30006
@@ -76,7 +76,7 @@ data:
             widget:
               type: bazarr
               url: http://localhost:6767
-              key: {{HOMEPAGE_VAR_API_KEY}}
+              key: {{ "{{" }}HOMEPAGE_VAR_API_KEY{{ "}}" }}
 
     - Download:
         - Transmission:
@@ -86,8 +86,8 @@ data:
             widget:
               type: transmission
               url: http://localhost:9091
-              username: {{HOMEPAGE_VAR_TR_USER}}
-              password: {{HOMEPAGE_VAR_TR_PASS}}
+              username: {{ "{{" }}HOMEPAGE_VAR_TR_USER{{ "}}" }}
+              password: {{ "{{" }}HOMEPAGE_VAR_TR_PASS{{ "}}" }}
         - ARM:
             icon: https://raw.githubusercontent.com/automatic-ripping-machine/automatic-ripping-machine/main/arm/static/img/arm-logo.png
             href: http://100.67.54.105:30008
