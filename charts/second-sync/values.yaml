@@ -29,3 +29,4 @@ images:
   bazarr: linuxserver/bazarr:latest
   overseerr: fallenbagel/jellyseerr:latest
   jellyfin: jellyfin/jellyfin:latest
+  flaresolverr: ghcr.io/flaresolverr/flaresolverr:latest

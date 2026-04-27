@@ -208,6 +208,14 @@ spec:
         - name: config-overseerr
           mountPath: /app/config
 
+      - name: flaresolverr
+        image: {{ .Values.images.flaresolverr }}
+        env:
+        - name: LOG_LEVEL
+          value: info
+        - name: TZ
+          value: UTC
+
       # --- AUTO-LINKER SIDE CAR ---
       - name: arr-linker
         image: alpine
@@ -253,6 +261,13 @@ spec:
               echo "Adding Transmission to Sonarr..."
               curl -s -X POST "http://localhost:8989/api/v3/downloadclient?apikey=$API_KEY" -H "Content-Type: application/json" \
                 -d "{\"name\": \"Transmission\", \"implementation\": \"Transmission\", \"configContract\": \"TransmissionSettings\", \"fields\": [{\"name\": \"host\", \"value\": \"localhost\"}, {\"name\": \"port\", \"value\": 9091}, {\"name\": \"username\", \"value\": \"admin\"}, {\"name\": \"password\", \"value\": \"$PASSWORD\"}]}"
+            fi
+
+            # 5. Prowlarr -> FlareSolverr
+            if ! curl -s "http://localhost:9696/api/v1/indexerproxy?apikey=$API_KEY" | jq -e ".[] | select(.name == \"FlareSolverr\")" > /dev/null; then
+              echo "Adding FlareSolverr to Prowlarr..."
+              curl -s -X POST "http://localhost:9696/api/v1/indexerproxy?apikey=$API_KEY" -H "Content-Type: application/json" \
+                -d "{\"name\": \"FlareSolverr\", \"implementation\": \"FlareSolverr\", \"configContract\": \"FlareSolverrSettings\", \"fields\": [{\"name\": \"host\", \"value\": \"http://localhost:8191\"}, {\"name\": \"requestTimeout\", \"value\": 60}]}"
             fi
 
             echo "Linking complete. Sidecar sleeping."
