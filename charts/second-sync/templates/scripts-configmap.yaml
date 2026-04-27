@@ -115,9 +115,9 @@ data:
         for USER_ID in $(echo "$USERS" | jq -r '.[].Id'); do
           CURRENT_CONF=$(curl -s -H "X-Emby-Token: $J_TOKEN" "http://jellyfin:8096/Users/$USER_ID/Configuration")
           if [ ! -z "$CURRENT_CONF" ] && [ "$CURRENT_CONF" != "null" ]; then
-            if [ "$(echo "$CURRENT_CONF" | jq -r '.AudioLanguagePreference')" != "eng" ] || [ "$(echo "$CURRENT_CONF" | jq -r '.SubtitleLanguagePreference')" != "eng" ]; then
-              echo "Setting English defaults for Jellyfin user $USER_ID..."
-              UPDATED_CONF=$(echo "$CURRENT_CONF" | jq '.AudioLanguagePreference = "eng" | .SubtitleLanguagePreference = "eng" | .SubtitleMode = "Default"')
+            if [ "$(echo "$CURRENT_CONF" | jq -r '.AudioLanguagePreference')" != "eng" ] || [ "$(echo "$CURRENT_CONF" | jq -r '.SubtitleLanguagePreference')" != "eng" ] || [ "$(echo "$CURRENT_CONF" | jq -r '.SubtitleMode')" != "NoSubtitles" ]; then
+              echo "Setting English/NoSubtitles defaults for Jellyfin user $USER_ID..."
+              UPDATED_CONF=$(echo "$CURRENT_CONF" | jq '.AudioLanguagePreference = "eng" | .SubtitleLanguagePreference = "eng" | .SubtitleMode = "NoSubtitles"')
               curl -s -X POST -H "X-Emby-Token: $J_TOKEN" -H "Content-Type: application/json" \
                 "http://jellyfin:8096/Users/$USER_ID/Configuration" -d "$UPDATED_CONF" > /dev/null
             fi
@@ -151,7 +151,7 @@ data:
         if echo "$JELLYFIN_CONF" | grep -q "100.67.54.105"; then
            echo "Updating Jellyfin link in Jellyseerr..."
            curl -s -X POST "http://localhost:5055/api/v1/settings/jellyfin" -H "X-Api-Key: $API_KEY" -H "Content-Type: application/json" \
-             -d "{\"ip\": \"jellyfin\", \"port\": 8096, \"apiKey\": \"$(echo "$JELLYFIN_CONF" | jq -r .apiKey)\", \"useSsl\": false}"
+             -d "{\"hostname\": \"jellyfin\", \"port\": 8096, \"apiKey\": \"$(echo "$JELLYFIN_CONF" | jq -r .apiKey)\", \"useSsl\": false}"
         fi
       fi
 
