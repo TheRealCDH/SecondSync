@@ -31,7 +31,6 @@ spec:
           readOnly: true
         - name: shared-keys
           mountPath: /run/shared
-
       containers:
       # --- VPN GATEWAY ---
       - name: gluetun
@@ -214,19 +213,10 @@ spec:
             export HOMEPAGE_VAR_API_KEY=$(cat /run/shared/api_key)
             export HOMEPAGE_VAR_TR_USER={{ .Values.transmission.username | quote }}
             export HOMEPAGE_VAR_TR_PASS={{ .Values.transmission.password | quote }}
-            export HOMEPAGE_ALLOWED_HOSTS="100.67.54.105,100.67.54.105:30000,localhost,localhost:3000,127.0.0.1"
             exec /usr/local/bin/node server.js
-
         env:
-        - name: HOMEPAGE_VAR_API_KEY
-          valueFrom:
-            path: /run/shared/api_key
-        - name: HOMEPAGE_VAR_TR_USER
-          value: {{ .Values.transmission.username | quote }}
-        - name: HOMEPAGE_VAR_TR_PASS
-          value: {{ .Values.transmission.password | quote }}
         - name: HOMEPAGE_ALLOWED_HOSTS
-          value: "*"
+          value: "100.67.54.105,100.67.54.105:30000,localhost,localhost:3000,127.0.0.1"
         volumeMounts:
         - name: shared-keys
           mountPath: /run/shared
@@ -253,6 +243,11 @@ spec:
           mountPath: /run/scripts
         - name: config-overseerr
           mountPath: /jellyseerr
+        - name: config-arm
+          mountPath: /arm-config
+          subPath: config
+        - name: media
+          mountPath: /home/arm/media
       volumes:
 
       - name: shared-keys
