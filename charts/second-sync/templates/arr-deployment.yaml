@@ -270,29 +270,41 @@ spec:
                 -d "{\"name\": \"FlareSolverr\", \"enabled\": true, \"implementation\": \"FlareSolverr\", \"configContract\": \"FlareSolverrSettings\", \"fields\": [{\"name\": \"host\", \"value\": \"http://localhost:8191\"}, {\"name\": \"requestTimeout\", \"value\": 60}]}"
             fi
 
-            # 6. Auto-tag Indexers for FlareSolverr
-            echo "Tagging all indexers for FlareSolverr..."
-            # Create tag if not exists
-            TAG_ID=$(curl -s "http://localhost:9696/api/v1/tag?apikey=$API_KEY" | jq -r ".[] | select(.label == \"flaresolverr\") | .id")
-            if [ -z "$TAG_ID" ]; then
-              TAG_ID=$(curl -s -X POST "http://localhost:9696/api/v1/tag?apikey=$API_KEY" -H "Content-Type: application/json" -d "{\"label\": \"flaresolverr\"}" | jq -r ".id")
-            fi
-            
-            # Apply tag to FlareSolverr proxy
-            PROXY_ID=$(curl -s "http://localhost:9696/api/v1/indexerproxy?apikey=$API_KEY" | jq -r ".[] | select(.name == \"FlareSolverr\") | .id")
-            curl -s -X PUT "http://localhost:9696/api/v1/indexerproxy/$PROXY_ID?apikey=$API_KEY" -H "Content-Type: application/json" \
-              $(curl -s "http://localhost:9696/api/v1/indexerproxy/$PROXY_ID?apikey=$API_KEY" | jq -c ".tags = [$TAG_ID]") > /dev/null
+            echo "All services up. Entering automation loop..."
 
-            # Apply tag to all indexers (The "Automatic" part)
-            INDEXERS=$(curl -s "http://localhost:9696/api/v1/indexer?apikey=$API_KEY" | jq -r ".[] | .id")
-            for ID in $INDEXERS; do
-              echo "Applying flaresolverr tag to indexer $ID..."
-              curl -s -X PUT "http://localhost:9696/api/v1/indexer/$ID?apikey=$API_KEY" -H "Content-Type: application/json" \
-                $(curl -s "http://localhost:9696/api/v1/indexer/$ID?apikey=$API_KEY" | jq -c ".tags = (.tags + [$TAG_ID] | unique)") > /dev/null
+            while true; do
+              # 6. Auto-tag Indexers for FlareSolverr
+              # Create tag if not exists
+              TAG_ID=$(curl -s "http://localhost:9696/api/v1/tag?apikey=$API_KEY" | jq -r ".[] | select(.label == \"flaresolverr\") | .id")
+              if [ -z "$TAG_ID" ] || [ "$TAG_ID" == "null" ]; then
+                TAG_ID=$(curl -s -X POST "http://localhost:9696/api/v1/tag?apikey=$API_KEY" -H "Content-Type: application/json" -d "{\"label\": \"flaresolverr\"}" | jq -r ".id")
+              fi
+              
+              if [ ! -z "$TAG_ID" ] && [ "$TAG_ID" != "null" ]; then
+                # Apply tag to FlareSolverr proxy if not already tagged
+                PROXY=$(curl -s "http://localhost:9696/api/v1/indexerproxy?apikey=$API_KEY" | jq -c ".[] | select(.name == \"FlareSolverr\")")
+                PROXY_ID=$(echo "$PROXY" | jq -r ".id")
+                if ! echo "$PROXY" | jq -e ".tags | contains([$TAG_ID])" > /dev/null; then
+                  echo "Applying flaresolverr tag to FlareSolverr proxy..."
+                  UPDATED_PROXY=$(echo "$PROXY" | jq -c ".tags = ( .tags + [$TAG_ID] | unique )")
+                  curl -s -X PUT "http://localhost:9696/api/v1/indexerproxy/$PROXY_ID?apikey=$API_KEY" -H "Content-Type: application/json" -d "$UPDATED_PROXY" > /dev/null
+                fi
+
+                # Apply tag to all indexers (The "Automatic" part)
+                INDEXERS_JSON=$(curl -s "http://localhost:9696/api/v1/indexer?apikey=$API_KEY")
+                INDEXER_IDS=$(echo "$INDEXERS_JSON" | jq -r ".[] | .id")
+                for ID in $INDEXER_IDS; do
+                  INDEXER=$(echo "$INDEXERS_JSON" | jq -c ".[] | select(.id == $ID)")
+                  if ! echo "$INDEXER" | jq -e ".tags | contains([$TAG_ID])" > /dev/null; then
+                    echo "Applying flaresolverr tag to indexer $ID..."
+                    UPDATED_INDEXER=$(echo "$INDEXER" | jq -c ".tags = ( .tags + [$TAG_ID] | unique )")
+                    curl -s -X PUT "http://localhost:9696/api/v1/indexer/$ID?apikey=$API_KEY" -H "Content-Type: application/json" -d "$UPDATED_INDEXER" > /dev/null
+                  fi
+                done
+              fi
+
+              sleep 60
             done
-
-            echo "Linking complete. Sidecar sleeping."
-            sleep infinity
         volumeMounts:
         - name: shared-keys
           mountPath: /run/shared
