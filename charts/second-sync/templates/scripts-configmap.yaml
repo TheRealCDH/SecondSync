@@ -73,20 +73,26 @@ data:
         curl -s -X POST "http://localhost:9696/api/v1/applications?apikey=$API_KEY" -H "Content-Type: application/json" \
           -d "{\"name\": \"$NAME\", \"enabled\": true, \"syncLevel\": \"fullSync\", \"configContract\": \"$CONTRACT\", \"implementation\": \"$NAME\", \"fields\": [{\"name\": \"baseUrl\", \"value\": \"http://localhost:$PORT\"}, {\"name\": \"apiKey\", \"value\": \"$API_KEY\"}]}"
       else
-        echo "Updating $NAME in Prowlarr to ensure syncLevel is fullSync..."
+        echo "Updating $NAME in Prowlarr..."
         ID=$(echo $EXISTING | jq -r .id)
-        # Preserve existing fields but force syncLevel
-        UPDATED=$(echo $EXISTING | jq -c ".syncLevel = \"fullSync\"")
+        UPDATED=$(echo $EXISTING | jq -c ".syncLevel = \"fullSync\" | .fields = [{\"name\": \"baseUrl\", \"value\": \"http://localhost:$PORT\"}, {\"name\": \"apiKey\", \"value\": \"$API_KEY\"}]")
         curl -s -X PUT "http://localhost:9696/api/v1/applications/$ID?apikey=$API_KEY" -H "Content-Type: application/json" -d "$UPDATED"
       fi
     done
 
     # 2. Radarr/Sonarr -> Transmission
     for PORT in 7878 8989; do
-      if ! curl -s "http://localhost:$PORT/api/v3/downloadclient?apikey=$API_KEY" | jq -e ".[] | select(.name == \"Transmission\")" > /dev/null; then
+      EXISTING=$(curl -s "http://localhost:$PORT/api/v3/downloadclient?apikey=$API_KEY" | jq -c ".[] | select(.name == \"Transmission\")")
+      if [ -z "$EXISTING" ]; then
         echo "Adding Transmission to app on port $PORT..."
         curl -s -X POST "http://localhost:$PORT/api/v3/downloadclient?apikey=$API_KEY" -H "Content-Type: application/json" \
           -d "{\"name\": \"Transmission\", \"enable\": true, \"priority\": 1, \"implementation\": \"Transmission\", \"configContract\": \"TransmissionSettings\", \"fields\": [{\"name\": \"host\", \"value\": \"localhost\"}, {\"name\": \"port\", \"value\": 9091}, {\"name\": \"username\", \"value\": \"$USER\"}, {\"name\": \"password\", \"value\": \"$PASSWORD\"}]}"
+      else
+        echo "Updating Transmission in app on port $PORT..."
+        ID=$(echo $EXISTING | jq -r .id)
+        # For updates, we need to send the whole object
+        UPDATED=$(echo $EXISTING | jq -c ".fields = [{\"name\": \"host\", \"value\": \"localhost\"}, {\"name\": \"port\", \"value\": 9091}, {\"name\": \"username\", \"value\": \"$USER\"}, {\"name\": \"password\", \"value\": \"$PASSWORD\"}]")
+        curl -s -X PUT "http://localhost:$PORT/api/v3/downloadclient/$ID?apikey=$API_KEY" -H "Content-Type: application/json" -d "$UPDATED"
       fi
     done
 
@@ -117,6 +123,45 @@ data:
     echo "Automation complete. Entering loop..."
     while true; do
       echo "--- Loop iteration $(date) ---"
+      
+      # Patch Jellyseerr if it's finally ready
+      FILE="/jellyseerr/settings.json"
+      if [ -f "$FILE" ] && jq -e ".main" "$FILE" > /dev/null; then
+        if [ "$(jq -r '.main.apiKey' "$FILE")" != "$API_KEY" ]; then
+          echo "Patching Jellyseerr API key in file..."
+          TMP=$(mktemp); jq --arg key "$API_KEY" '.main.apiKey = $key' "$FILE" > "$TMP" && mv "$TMP" "$FILE"
+        fi
+        
+        # Link Radarr to Jellyseerr
+        # We try to find the profile ID dynamically
+        R_PROFILE_ID=$(curl -s "http://localhost:7878/api/v3/qualityprofile?apikey=$API_KEY" | jq -r ".[] | select(.name == \"Any\") | .id")
+        if [ -z "$R_PROFILE_ID" ] || [ "$R_PROFILE_ID" == "null" ]; then R_PROFILE_ID=1; fi
+        
+        if ! curl -s -X GET "http://localhost:5055/api/v1/settings/radarr" -H "X-Api-Key: $API_KEY" | jq -e ".[]" > /dev/null; then
+          echo "Linking Radarr to Jellyseerr..."
+          curl -s -X POST "http://localhost:5055/api/v1/settings/radarr" -H "X-Api-Key: $API_KEY" -H "Content-Type: application/json" \
+            -d "{\"name\": \"Radarr\", \"hostname\": \"localhost\", \"port\": 7878, \"apiKey\": \"$API_KEY\", \"useSsl\": false, \"baseUrl\": \"\", \"activeProfileId\": $R_PROFILE_ID, \"activeProfileName\": \"Any\", \"activeDirectory\": \"/downloads/Movies\", \"isDefault\": true, \"syncLevel\": 1, \"is4k\": false, \"minimumAvailability\": \"announced\"}"
+        fi
+
+        # Link Sonarr to Jellyseerr
+        S_PROFILE_ID=$(curl -s "http://localhost:8989/api/v3/qualityprofile?apikey=$API_KEY" | jq -r ".[] | select(.name == \"Any\") | .id")
+        if [ -z "$S_PROFILE_ID" ] || [ "$S_PROFILE_ID" == "null" ]; then S_PROFILE_ID=1; fi
+
+        if ! curl -s -X GET "http://localhost:5055/api/v1/settings/sonarr" -H "X-Api-Key: $API_KEY" | jq -e ".[]" > /dev/null; then
+          echo "Linking Sonarr to Jellyseerr..."
+          curl -s -X POST "http://localhost:5055/api/v1/settings/sonarr" -H "X-Api-Key: $API_KEY" -H "Content-Type: application/json" \
+            -d "{\"name\": \"Sonarr\", \"hostname\": \"localhost\", \"port\": 8989, \"apiKey\": \"$API_KEY\", \"useSsl\": false, \"baseUrl\": \"\", \"activeProfileId\": $S_PROFILE_ID, \"activeProfileName\": \"Any\", \"activeDirectory\": \"/downloads/TV Shows\", \"isDefault\": true, \"syncLevel\": 1, \"is4k\": false, \"enableSeasonFolders\": true}"
+        fi
+
+        # Update Jellyfin connection
+        JELLYFIN_CONF=$(curl -s -X GET "http://localhost:5055/api/v1/settings/jellyfin" -H "X-Api-Key: $API_KEY")
+        if echo "$JELLYFIN_CONF" | grep -q "100.67.54.105"; then
+           echo "Updating Jellyfin link in Jellyseerr..."
+           curl -s -X POST "http://localhost:5055/api/v1/settings/jellyfin" -H "X-Api-Key: $API_KEY" -H "Content-Type: application/json" \
+             -d "{\"ip\": \"jellyfin\", \"port\": 8096, \"apiKey\": \"$(echo "$JELLYFIN_CONF" | jq -r .apiKey)\", \"useSsl\": false}"
+        fi
+      fi
+
       # 9. Jellyfin Language Defaults
       J_TOKEN="2727b02a3f414e0b95b9401cbaaa5c02"
       USERS=$(curl -s -H "X-Emby-Token: $J_TOKEN" http://jellyfin:8096/Users)
@@ -134,36 +179,6 @@ data:
         done
       fi
 
-      FILE="/jellyseerr/settings.json"
-      if [ -f "$FILE" ] && jq -e ".main" "$FILE" > /dev/null; then
-        if [ "$(jq -r '.main.apiKey' "$FILE")" != "$API_KEY" ]; then
-          echo "Patching Jellyseerr API key in file..."
-          TMP=$(mktemp); jq --arg key "$API_KEY" '.main.apiKey = $key' "$FILE" > "$TMP" && mv "$TMP" "$FILE"
-        fi
-        
-        # Link Radarr to Jellyseerr
-        if ! curl -s -X GET "http://localhost:5055/api/v1/settings/radarr" -H "X-Api-Key: $API_KEY" | jq -e ".[]" > /dev/null; then
-          echo "Linking Radarr to Jellyseerr..."
-          curl -s -X POST "http://localhost:5055/api/v1/settings/radarr" -H "X-Api-Key: $API_KEY" -H "Content-Type: application/json" \
-            -d "{\"name\": \"Radarr\", \"hostname\": \"localhost\", \"port\": 7878, \"apiKey\": \"$API_KEY\", \"useSsl\": false, \"baseUrl\": \"\", \"activeProfileId\": 1, \"activeProfileName\": \"Any\", \"activeDirectory\": \"/downloads/Movies\", \"isDefault\": true, \"syncLevel\": 1, \"is4k\": false, \"minimumAvailability\": \"announced\"}"
-        fi
-
-        # Link Sonarr to Jellyseerr
-        if ! curl -s -X GET "http://localhost:5055/api/v1/settings/sonarr" -H "X-Api-Key: $API_KEY" | jq -e ".[]" > /dev/null; then
-          echo "Linking Sonarr to Jellyseerr..."
-          curl -s -X POST "http://localhost:5055/api/v1/settings/sonarr" -H "X-Api-Key: $API_KEY" -H "Content-Type: application/json" \
-            -d "{\"name\": \"Sonarr\", \"hostname\": \"localhost\", \"port\": 8989, \"apiKey\": \"$API_KEY\", \"useSsl\": false, \"baseUrl\": \"\", \"activeProfileId\": 1, \"activeProfileName\": \"Any\", \"activeDirectory\": \"/downloads/TV Shows\", \"isDefault\": true, \"syncLevel\": 1, \"is4k\": false, \"enableSeasonFolders\": true}"
-        fi
-
-        # Update Jellyfin connection
-        JELLYFIN_CONF=$(curl -s -X GET "http://localhost:5055/api/v1/settings/jellyfin" -H "X-Api-Key: $API_KEY")
-        if echo "$JELLYFIN_CONF" | grep -q "100.67.54.105"; then
-           echo "Updating Jellyfin link in Jellyseerr..."
-           curl -s -X POST "http://localhost:5055/api/v1/settings/jellyfin" -H "X-Api-Key: $API_KEY" -H "Content-Type: application/json" \
-             -d "{\"ip\": \"jellyfin\", \"port\": 8096, \"apiKey\": \"$(echo "$JELLYFIN_CONF" | jq -r .apiKey)\", \"useSsl\": false}"
-        fi
-      fi
-
       # 10. ARM Config Patching
       ARM_CONF="/arm-config/arm.yaml"
       if [ -f "$ARM_CONF" ]; then
@@ -177,6 +192,7 @@ data:
         fi
       fi
 
+      # 6. Auto-tag Indexers for FlareSolverr
       TAG_ID=$(curl -s "http://localhost:9696/api/v1/tag?apikey=$API_KEY" | jq -r ".[] | select(.label == \"flaresolverr\") | .id")
       if [ -z "$TAG_ID" ] || [ "$TAG_ID" == "null" ]; then
         TAG_ID=$(curl -s -X POST "http://localhost:9696/api/v1/tag?apikey=$API_KEY" -H "Content-Type: application/json" -d "{\"label\": \"flaresolverr\"}" | jq -r ".id")
@@ -202,8 +218,7 @@ data:
         fi
       fi
       
-      # Explicitly trigger a sync in Prowlarr
-      echo "Triggering Prowlarr sync..."
+      # Trigger a sync in Prowlarr
       curl -s -X POST "http://localhost:9696/api/v1/command?apikey=$API_KEY" -H "Content-Type: application/json" -d '{"name": "ApplicationIndexerSync"}' > /dev/null
 
       sleep 60
