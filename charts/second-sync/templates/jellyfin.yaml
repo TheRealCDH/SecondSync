@@ -14,6 +14,7 @@ spec:
     spec:
       nodeSelector:
         kubernetes.io/hostname: {{ .Values.nodeName }}
+      runtimeClassName: nvidia
       containers:
       - name: jellyfin
         image: {{ .Values.images.jellyfin }}
