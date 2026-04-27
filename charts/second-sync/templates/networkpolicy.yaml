@@ -10,6 +10,7 @@ spec:
         values:
           - arr-stack
           - jellyfin
+          - arm
   ingress:
   - {} # Allow all ingress
   policyTypes:
