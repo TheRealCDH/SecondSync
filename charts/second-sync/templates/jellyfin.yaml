@@ -14,9 +14,18 @@ spec:
     spec:
       nodeSelector:
         kubernetes.io/hostname: {{ .Values.nodeName }}
+      runtimeClassName: nvidia
       containers:
       - name: jellyfin
         image: {{ .Values.images.jellyfin }}
+        env:
+        - name: NVIDIA_VISIBLE_DEVICES
+          value: "all"
+        - name: NVIDIA_DRIVER_CAPABILITIES
+          value: "all"
+        resources:
+          limits:
+            nvidia.com/gpu: 1
         volumeMounts:
         - name: config-jellyfin
           mountPath: /config
