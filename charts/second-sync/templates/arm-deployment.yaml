@@ -14,9 +14,24 @@ spec:
     spec:
       nodeSelector:
         kubernetes.io/hostname: {{ .Values.nodeName }}
-      # Share process namespace so the listener can see if the ripper is running
-      shareProcessNamespace: true
+      initContainers:
+      - name: arm-permissions
+        image: alpine
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            echo "Fixing ARM config permissions..."
+            mkdir -p /home/arm /etc/arm/config
+            chown -R 1000:1000 /home/arm /etc/arm/config
+        volumeMounts:
+        - name: config-arm
+          mountPath: /home/arm
+          subPath: home
+        - name: config-arm
+          mountPath: /etc/arm/config
+          subPath: config
       containers:
+
       - name: arm
         image: {{ .Values.images.arm }}
         securityContext:

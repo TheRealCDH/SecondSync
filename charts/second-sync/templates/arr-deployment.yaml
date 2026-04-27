@@ -25,23 +25,12 @@ spec:
             RAW_KEY=$(cat /etc/vpn/mull.key | tr -d '\n\r ')
             echo "$RAW_KEY" | sha256sum | cut -c1-32 > /run/shared/api_key
             echo "$RAW_KEY" | sha256sum | cut -c1-16 > /run/shared/password
-            
-            # Fix ARM config directory permissions
-            echo "Fixing ARM config permissions..."
-            mkdir -p /home/arm /etc/arm/config
-            chown -R 1000:1000 /home/arm /etc/arm/config
         volumeMounts:
         - name: vpn-key
           mountPath: /etc/vpn/mull.key
           readOnly: true
         - name: shared-keys
           mountPath: /run/shared
-        - name: config-arm
-          mountPath: /home/arm
-          subPath: home
-        - name: config-arm
-          mountPath: /etc/arm/config
-          subPath: config
 
       containers:
       # --- VPN GATEWAY ---
@@ -251,13 +240,8 @@ spec:
           mountPath: /run/scripts
         - name: config-overseerr
           mountPath: /jellyseerr
-        - name: config-arm
-          mountPath: /arm-config
-          subPath: config
-        - name: media
-          mountPath: /home/arm/media
-
       volumes:
+
       - name: shared-keys
         emptyDir: {}
       - name: arr-scripts
