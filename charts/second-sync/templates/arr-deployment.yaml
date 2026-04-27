@@ -39,7 +39,7 @@ spec:
         - name: WIREGUARD_PUBLIC_KEY
           value: "5ioE7vTw80KVx0S/zYOZonR5ZkR+uiNJogR9Pyqtwzg="
         - name: WIREGUARD_ADDRESSES
-          value: "10.72.231.112/32"
+          value: "10.68.25.24/32"
         - name: FIREWALL_OUTBOUND_SUBNETS
         volumeMounts:
         - name: vpn-key
