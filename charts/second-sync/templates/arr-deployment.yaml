@@ -29,7 +29,7 @@ spec:
           runAsUser: 0
         env:
         - name: VPN_SERVICE_PROVIDER
-          value: "mullvad"
+          value: "custom"
         - name: VPN_TYPE
           value: "wireguard"
         - name: WIREGUARD_ENDPOINT_IP
