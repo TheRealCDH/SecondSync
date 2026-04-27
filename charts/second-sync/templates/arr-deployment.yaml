@@ -14,6 +14,7 @@ spec:
     spec:
       nodeSelector:
         kubernetes.io/hostname: {{ .Values.nodeName }}
+      terminationGracePeriodSeconds: 60
       initContainers:
       - name: key-derivator
         image: alpine
@@ -161,6 +162,8 @@ spec:
           - |
             export PROWLARR__AUTH__APIKEY=$(cat /run/shared/api_key)
             export PROWLARR__AUTH__METHOD=External
+            export HTTP_PROXY=http://localhost:8118
+            export NO_PROXY=localhost,127.0.0.1,10.0.0.0/8,100.64.0.0/10
             exec /init
         env:
         - name: PUID
@@ -221,7 +224,7 @@ spec:
         env:
         - name: FLARESOLVERR_URL
           value: "http://localhost:8191"
-        - name: PROXY_PORT
+        - name: LISTEN_PORT
           value: "8118"
         - name: LOG_LEVEL
           value: info
