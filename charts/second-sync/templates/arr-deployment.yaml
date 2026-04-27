@@ -28,7 +28,8 @@ spec:
             
             # Fix ARM config directory permissions
             echo "Fixing ARM config permissions..."
-            chown -R 1000:1000 /home/arm
+            mkdir -p /home/arm /etc/arm/config
+            chown -R 1000:1000 /home/arm /etc/arm/config
         volumeMounts:
         - name: vpn-key
           mountPath: /etc/vpn/mull.key
@@ -37,6 +38,10 @@ spec:
           mountPath: /run/shared
         - name: config-arm
           mountPath: /home/arm
+          subPath: home
+        - name: config-arm
+          mountPath: /etc/arm/config
+          subPath: config
 
       containers:
       # --- VPN GATEWAY ---
@@ -222,6 +227,10 @@ spec:
         volumeMounts:
         - name: config-arm
           mountPath: /home/arm
+          subPath: home
+        - name: config-arm
+          mountPath: /etc/arm/config
+          subPath: config
         - name: media
           mountPath: /home/arm/media
         - name: dev-sr0
