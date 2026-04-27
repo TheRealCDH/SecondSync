@@ -4,9 +4,6 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: {{ $app }}-config-pvc
-  annotations:
-    openebs.io/zpool: "zroot"
-    openebs.io/cas-type: "localpv-zfs"
 spec:
   accessModes:
     - ReadWriteOnce
