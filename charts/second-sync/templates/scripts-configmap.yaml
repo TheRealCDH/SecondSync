@@ -56,44 +56,42 @@ data:
 
     echo "All services up. Linking..."
 
-    # 1. Prowlarr -> Radarr
+    # 1. Prowlarr -> Radarr/Sonarr
     if ! curl -s "http://localhost:9696/api/v1/applications?apikey=$API_KEY" | jq -e ".[] | select(.name == \"Radarr\")" > /dev/null; then
-      echo "Adding Radarr to Prowlarr..."
       curl -s -X POST "http://localhost:9696/api/v1/applications?apikey=$API_KEY" -H "Content-Type: application/json" \
         -d "{\"name\": \"Radarr\", \"enabled\": true, \"configContract\": \"RadarrSettings\", \"implementation\": \"Radarr\", \"fields\": [{\"name\": \"baseUrl\", \"value\": \"http://localhost:7878\"}, {\"name\": \"apiKey\", \"value\": \"$API_KEY\"}, {\"name\": \"syncLevel\", \"value\": \"fullSync\"}]}"
     fi
-
-    # 2. Prowlarr -> Sonarr
     if ! curl -s "http://localhost:9696/api/v1/applications?apikey=$API_KEY" | jq -e ".[] | select(.name == \"Sonarr\")" > /dev/null; then
-      echo "Adding Sonarr to Prowlarr..."
       curl -s -X POST "http://localhost:9696/api/v1/applications?apikey=$API_KEY" -H "Content-Type: application/json" \
         -d "{\"name\": \"Sonarr\", \"enabled\": true, \"configContract\": \"SonarrSettings\", \"implementation\": \"Sonarr\", \"fields\": [{\"name\": \"baseUrl\", \"value\": \"http://localhost:8989\"}, {\"name\": \"apiKey\", \"value\": \"$API_KEY\"}, {\"name\": \"syncLevel\", \"value\": \"fullSync\"}]}"
     fi
 
-    # 3. Radarr -> Transmission
-    if ! curl -s "http://localhost:7878/api/v3/downloadclient?apikey=$API_KEY" | jq -e ".[] | select(.name == \"Transmission\")" > /dev/null; then
-      echo "Adding Transmission to Radarr..."
-      curl -s -X POST "http://localhost:7878/api/v3/downloadclient?apikey=$API_KEY" -H "Content-Type: application/json" \
-        -d "{\"name\": \"Transmission\", \"enable\": true, \"priority\": 1, \"implementation\": \"Transmission\", \"configContract\": \"TransmissionSettings\", \"fields\": [{\"name\": \"host\", \"value\": \"localhost\"}, {\"name\": \"port\", \"value\": 9091}, {\"name\": \"username\", \"value\": \"admin\"}, {\"name\": \"password\", \"value\": \"$PASSWORD\"}]}"
+    # 2. Radarr/Sonarr -> Transmission
+    for PORT in 7878 8989; do
+      if ! curl -s "http://localhost:$PORT/api/v3/downloadclient?apikey=$API_KEY" | jq -e ".[] | select(.name == \"Transmission\")" > /dev/null; then
+        curl -s -X POST "http://localhost:$PORT/api/v3/downloadclient?apikey=$API_KEY" -H "Content-Type: application/json" \
+          -d "{\"name\": \"Transmission\", \"enable\": true, \"priority\": 1, \"implementation\": \"Transmission\", \"configContract\": \"TransmissionSettings\", \"fields\": [{\"name\": \"host\", \"value\": \"localhost\"}, {\"name\": \"port\", \"value\": 9091}, {\"name\": \"username\", \"value\": \"admin\"}, {\"name\": \"password\", \"value\": \"$PASSWORD\"}]}"
+      fi
+    done
+
+    # 3. Add Root Folders
+    if ! curl -s "http://localhost:7878/api/v3/rootfolder?apikey=$API_KEY" | jq -e ".[]" > /dev/null; then
+      echo "Adding Radarr Root Folder..."
+      curl -s -X POST "http://localhost:7878/api/v3/rootfolder?apikey=$API_KEY" -H "Content-Type: application/json" -d "{\"path\": \"/downloads/Movies\"}"
+    fi
+    if ! curl -s "http://localhost:8989/api/v3/rootfolder?apikey=$API_KEY" | jq -e ".[]" > /dev/null; then
+      echo "Adding Sonarr Root Folder..."
+      curl -s -X POST "http://localhost:8989/api/v3/rootfolder?apikey=$API_KEY" -H "Content-Type: application/json" -d "{\"path\": \"/downloads/TV Shows\"}"
     fi
 
-    # 4. Sonarr -> Transmission
-    if ! curl -s "http://localhost:8989/api/v3/downloadclient?apikey=$API_KEY" | jq -e ".[] | select(.name == \"Transmission\")" > /dev/null; then
-      echo "Adding Transmission to Sonarr..."
-      curl -s -X POST "http://localhost:8989/api/v3/downloadclient?apikey=$API_KEY" -H "Content-Type: application/json" \
-        -d "{\"name\": \"Transmission\", \"enable\": true, \"priority\": 1, \"implementation\": \"Transmission\", \"configContract\": \"TransmissionSettings\", \"fields\": [{\"name\": \"host\", \"value\": \"localhost\"}, {\"name\": \"port\", \"value\": 9091}, {\"name\": \"username\", \"value\": \"admin\"}, {\"name\": \"password\", \"value\": \"$PASSWORD\"}]}"
-    fi
-
-    # 5. Prowlarr -> FlareSolverr (API)
+    # 4. Prowlarr -> FlareSolverr
     if ! curl -s "http://localhost:9696/api/v1/indexerproxy?apikey=$API_KEY" | jq -e ".[] | select(.name == \"FlareSolverr\")" > /dev/null; then
-      echo "Adding FlareSolverr API to Prowlarr..."
       curl -s -X POST "http://localhost:9696/api/v1/indexerproxy?apikey=$API_KEY" -H "Content-Type: application/json" \
         -d "{\"name\": \"FlareSolverr\", \"enabled\": true, \"implementation\": \"FlareSolverr\", \"configContract\": \"FlareSolverrSettings\", \"fields\": [{\"name\": \"host\", \"value\": \"http://localhost:8191\"}, {\"name\": \"requestTimeout\", \"value\": 60}]}"
     fi
 
-    # 7. Global HTTP Proxy
+    # 5. Global HTTP Proxy
     if ! curl -s "http://localhost:9696/api/v1/indexerproxy?apikey=$API_KEY" | jq -e ".[] | select(.name == \"FlareSolverr-Global\")" > /dev/null; then
-      echo "Adding FlareSolverr-Global HTTP Proxy..."
       curl -s -X POST "http://localhost:9696/api/v1/indexerproxy?apikey=$API_KEY" -H "Content-Type: application/json" \
         -d "{\"name\": \"FlareSolverr-Global\", \"enabled\": true, \"implementation\": \"Http\", \"configContract\": \"HttpSettings\", \"fields\": [{\"name\": \"host\", \"value\": \"localhost\"}, {\"name\": \"port\", \"value\": 8118}]}"
     fi
@@ -107,16 +105,14 @@ data:
           TMP=$(mktemp); jq --arg key "$API_KEY" '.main.apiKey = $key' "$FILE" > "$TMP" && mv "$TMP" "$FILE"
         fi
         
-        # Link Radarr to Jellyseerr via API
+        # Link Radarr to Jellyseerr
         if ! curl -s -X GET "http://localhost:5055/api/v1/settings/radarr" -H "X-Api-Key: $API_KEY" | jq -e ".[]" > /dev/null; then
-          echo "Linking Radarr to Jellyseerr..."
           curl -s -X POST "http://localhost:5055/api/v1/settings/radarr" -H "X-Api-Key: $API_KEY" -H "Content-Type: application/json" \
             -d "{\"name\": \"Radarr\", \"hostname\": \"localhost\", \"port\": 7878, \"apiKey\": \"$API_KEY\", \"useSsl\": false, \"baseUrl\": \"\", \"activeProfileId\": 1, \"activeProfileName\": \"Any\", \"activeDirectory\": \"/downloads/Movies\", \"isDefault\": true, \"syncLevel\": 1, \"is4k\": false, \"minimumAvailability\": \"announced\"}"
         fi
 
-        # Link Sonarr to Jellyseerr via API
+        # Link Sonarr to Jellyseerr
         if ! curl -s -X GET "http://localhost:5055/api/v1/settings/sonarr" -H "X-Api-Key: $API_KEY" | jq -e ".[]" > /dev/null; then
-          echo "Linking Sonarr to Jellyseerr..."
           curl -s -X POST "http://localhost:5055/api/v1/settings/sonarr" -H "X-Api-Key: $API_KEY" -H "Content-Type: application/json" \
             -d "{\"name\": \"Sonarr\", \"hostname\": \"localhost\", \"port\": 8989, \"apiKey\": \"$API_KEY\", \"useSsl\": false, \"baseUrl\": \"\", \"activeProfileId\": 1, \"activeProfileName\": \"Any\", \"activeDirectory\": \"/downloads/TV Shows\", \"isDefault\": true, \"syncLevel\": 1, \"is4k\": false, \"enableSeasonFolders\": true}"
         fi
