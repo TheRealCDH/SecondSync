@@ -62,6 +62,8 @@ spec:
         args:
           - |
             echo "Starting ARM Insertion Listener..."
+            # Fix git safe directory issue
+            git config --global --add safe.directory /opt/arm
             while true; do
               if [ -b /dev/sr0 ]; then
                 # Check if disc is present using blkid
@@ -70,7 +72,8 @@ spec:
                   if ! ps aux | grep -v grep | grep -q "main.py"; then
                     echo "Disc detected! Triggering ARM..."
                     # We run the ripper as the arm user
-                    su - arm -c "python3 /opt/arm/arm/ripper/main.py -d sr0"
+                    # Ensure the user has the git config too
+                    su - arm -c "git config --global --add safe.directory /opt/arm && python3 /opt/arm/arm/ripper/main.py -d sr0"
                   fi
                 fi
               fi
@@ -78,6 +81,11 @@ spec:
             done
         securityContext:
           privileged: true
+        env:
+        - name: ARM_UID
+          value: "1000"
+        - name: ARM_GID
+          value: "1000"
         volumeMounts:
         - name: dev
           mountPath: /dev
