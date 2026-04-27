@@ -58,10 +58,12 @@ data:
 
     # 1. Prowlarr -> Radarr/Sonarr
     if ! curl -s "http://localhost:9696/api/v1/applications?apikey=$API_KEY" | jq -e ".[] | select(.name == \"Radarr\")" > /dev/null; then
+      echo "Adding Radarr to Prowlarr..."
       curl -s -X POST "http://localhost:9696/api/v1/applications?apikey=$API_KEY" -H "Content-Type: application/json" \
         -d "{\"name\": \"Radarr\", \"enabled\": true, \"configContract\": \"RadarrSettings\", \"implementation\": \"Radarr\", \"fields\": [{\"name\": \"baseUrl\", \"value\": \"http://localhost:7878\"}, {\"name\": \"apiKey\", \"value\": \"$API_KEY\"}, {\"name\": \"syncLevel\", \"value\": \"fullSync\"}]}"
     fi
     if ! curl -s "http://localhost:9696/api/v1/applications?apikey=$API_KEY" | jq -e ".[] | select(.name == \"Sonarr\")" > /dev/null; then
+      echo "Adding Sonarr to Prowlarr..."
       curl -s -X POST "http://localhost:9696/api/v1/applications?apikey=$API_KEY" -H "Content-Type: application/json" \
         -d "{\"name\": \"Sonarr\", \"enabled\": true, \"configContract\": \"SonarrSettings\", \"implementation\": \"Sonarr\", \"fields\": [{\"name\": \"baseUrl\", \"value\": \"http://localhost:8989\"}, {\"name\": \"apiKey\", \"value\": \"$API_KEY\"}, {\"name\": \"syncLevel\", \"value\": \"fullSync\"}]}"
     fi
@@ -122,6 +124,26 @@ data:
            curl -s -X POST "http://localhost:5055/api/v1/settings/jellyfin" -H "X-Api-Key: $API_KEY" -H "Content-Type: application/json" \
              -d "{\"name\": \"Main\", \"hostname\": \"jellyfin\", \"port\": 8096, \"apiKey\": \"$(echo "$JELLYFIN_CONF" | jq -r .apiKey)\", \"useSsl\": false}"
         fi
+      fi
+
+      # 9. Jellyfin Language Defaults
+      # We use the same API key that Jellyseerr uses (it was generated during initial manual setup and saved in db)
+      # I retrieved it earlier: 2727b02a3f414e0b95b9401cbaaa5c02
+      J_TOKEN="2727b02a3f414e0b95b9401cbaaa5c02"
+      USERS=$(curl -s -H "X-Emby-Token: $J_TOKEN" http://jellyfin:8096/Users)
+      if [ ! -z "$USERS" ] && echo "$USERS" | grep -q "Id"; then
+        for USER_ID in $(echo "$USERS" | jq -r '.[].Id'); do
+          CURRENT_CONF=$(curl -s -H "X-Emby-Token: $J_TOKEN" "http://jellyfin:8096/Users/$USER_ID/Configuration")
+          if [ ! -z "$CURRENT_CONF" ]; then
+            # Check if languages are already set to 'eng' to avoid unnecessary POSTs
+            if [ "$(echo "$CURRENT_CONF" | jq -r '.AudioLanguagePreference')" != "eng" ] || [ "$(echo "$CURRENT_CONF" | jq -r '.SubtitleLanguagePreference')" != "eng" ]; then
+              echo "Setting English defaults for Jellyfin user $USER_ID..."
+              UPDATED_CONF=$(echo "$CURRENT_CONF" | jq '.AudioLanguagePreference = "eng" | .SubtitleLanguagePreference = "eng" | .SubtitleMode = "Default"')
+              curl -s -X POST -H "X-Emby-Token: $J_TOKEN" -H "Content-Type: application/json" \
+                "http://jellyfin:8096/Users/$USER_ID/Configuration" -d "$UPDATED_CONF" > /dev/null
+            fi
+          fi
+        done
       fi
 
       TAG_ID=$(curl -s "http://localhost:9696/api/v1/tag?apikey=$API_KEY" | jq -r ".[] | select(.label == \"flaresolverr\") | .id")
