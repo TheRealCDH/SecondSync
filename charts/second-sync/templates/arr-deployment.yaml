@@ -243,6 +243,9 @@ spec:
           mountPath: /run/scripts
         - name: config-overseerr
           mountPath: /jellyseerr
+        - name: config-arm
+          mountPath: /arm-config
+          subPath: config
       volumes:
 
       - name: shared-keys
@@ -275,6 +278,9 @@ spec:
       - name: config-overseerr
         persistentVolumeClaim:
           claimName: overseerr-config-pvc
+      - name: config-arm
+        persistentVolumeClaim:
+          claimName: arm-config-pvc
       - name: config-homepage
         persistentVolumeClaim:
           claimName: homepage-config-pvc
