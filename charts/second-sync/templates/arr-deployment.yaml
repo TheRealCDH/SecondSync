@@ -99,7 +99,7 @@ spec:
         image: {{ .Values.images.overseerr }}
         volumeMounts:
         - name: config-overseerr
-          mountPath: /config
+          mountPath: /app/config
 
       volumes:
       - name: vpn-key
