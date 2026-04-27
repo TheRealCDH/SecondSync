@@ -226,5 +226,5 @@ data:
       # 5. Trigger a sync in Prowlarr
       curl -s -X POST "http://127.0.0.1:9696/api/v1/command?apikey=$API_KEY" -H "Content-Type: application/json" -d '{"name": "ApplicationIndexerSync"}' > /dev/null
 
-      sleep 60
+      sleep 300
     done
