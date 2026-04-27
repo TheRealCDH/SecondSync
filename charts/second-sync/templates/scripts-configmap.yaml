@@ -98,13 +98,14 @@ data:
 
     echo "Automation complete. Entering loop..."
     while true; do
+      echo "--- Loop iteration $(date) ---"
       # 9. Jellyfin Language Defaults
       J_TOKEN="2727b02a3f414e0b95b9401cbaaa5c02"
       USERS=$(curl -s -H "X-Emby-Token: $J_TOKEN" http://jellyfin:8096/Users)
       if [ ! -z "$USERS" ] && echo "$USERS" | grep -q "Id"; then
         for USER_ID in $(echo "$USERS" | jq -r '.[].Id'); do
           CURRENT_CONF=$(curl -s -H "X-Emby-Token: $J_TOKEN" "http://jellyfin:8096/Users/$USER_ID/Configuration")
-          if [ ! -z "$CURRENT_CONF" ]; then
+          if [ ! -z "$CURRENT_CONF" ] && [ "$CURRENT_CONF" != "null" ]; then
             if [ "$(echo "$CURRENT_CONF" | jq -r '.AudioLanguagePreference')" != "eng" ] || [ "$(echo "$CURRENT_CONF" | jq -r '.SubtitleLanguagePreference')" != "eng" ]; then
               echo "Setting English defaults for Jellyfin user $USER_ID..."
               UPDATED_CONF=$(echo "$CURRENT_CONF" | jq '.AudioLanguagePreference = "eng" | .SubtitleLanguagePreference = "eng" | .SubtitleMode = "Default"')
@@ -138,12 +139,10 @@ data:
 
         # Update Jellyfin connection
         JELLYFIN_CONF=$(curl -s -X GET "http://localhost:5055/api/v1/settings/jellyfin" -H "X-Api-Key: $API_KEY")
-        if echo "$JELLYFIN_CONF" | grep -q "100.67.54.105" || [ "$(echo "$JELLYFIN_CONF" | jq -r .hostname)" != "jellyfin" ]; then
+        if echo "$JELLYFIN_CONF" | grep -q "100.67.54.105"; then
            echo "Updating Jellyfin link in Jellyseerr..."
-           # We try a PUT first, then a POST if it fails? No, Jellyseerr usually uses POST for settings.
-           # I'll just exclude 'name' this time.
            curl -s -X POST "http://localhost:5055/api/v1/settings/jellyfin" -H "X-Api-Key: $API_KEY" -H "Content-Type: application/json" \
-             -d "{\"hostname\": \"jellyfin\", \"port\": 8096, \"apiKey\": \"$(echo "$JELLYFIN_CONF" | jq -r .apiKey)\", \"useSsl\": false}"
+             -d "{\"ip\": \"jellyfin\", \"port\": 8096, \"apiKey\": \"$(echo "$JELLYFIN_CONF" | jq -r .apiKey)\", \"useSsl\": false}"
         fi
       fi
 
