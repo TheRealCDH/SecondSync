@@ -14,6 +14,8 @@ spec:
     spec:
       nodeSelector:
         kubernetes.io/hostname: {{ .Values.nodeName }}
+      # Share process namespace so the listener can see if the ripper is running
+      shareProcessNamespace: true
       containers:
       - name: arm
         image: {{ .Values.images.arm }}
@@ -33,10 +35,49 @@ spec:
           subPath: config
         - name: media
           mountPath: /home/arm/media
-        - name: dev-sr0
-          mountPath: /dev/sr0
-        - name: dev-sg5
-          mountPath: /dev/sg5
+        - name: dev
+          mountPath: /dev
+        - name: sys
+          mountPath: /sys
+          readOnly: true
+      
+      - name: arm-listener
+        image: {{ .Values.images.arm }}
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            echo "Starting ARM Insertion Listener..."
+            while true; do
+              if [ -b /dev/sr0 ]; then
+                # Check if disc is present using blkid
+                if blkid /dev/sr0 > /dev/null 2>&1; then
+                  # Check if ARM main.py is already running in the Pod
+                  if ! ps aux | grep -v grep | grep -q "main.py"; then
+                    echo "Disc detected! Triggering ARM..."
+                    # We run the ripper as the arm user
+                    su - arm -c "python3 /opt/arm/arm/ripper/main.py -d sr0"
+                  fi
+                fi
+              fi
+              sleep 10
+            done
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - name: dev
+          mountPath: /dev
+        - name: sys
+          mountPath: /sys
+          readOnly: true
+        - name: config-arm
+          mountPath: /home/arm
+          subPath: home
+        - name: config-arm
+          mountPath: /etc/arm/config
+          subPath: config
+        - name: media
+          mountPath: /home/arm/media
+
       volumes:
       - name: media
         persistentVolumeClaim:
@@ -44,9 +85,9 @@ spec:
       - name: config-arm
         persistentVolumeClaim:
           claimName: arm-config-pvc
-      - name: dev-sr0
+      - name: dev
         hostPath:
-          path: /dev/sr0
-      - name: dev-sg5
+          path: /dev
+      - name: sys
         hostPath:
-          path: /dev/sg5
+          path: /sys
