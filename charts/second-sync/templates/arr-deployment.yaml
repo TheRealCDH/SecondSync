@@ -219,32 +219,66 @@ spec:
         - name: TZ
           value: UTC
 
-      - name: flaresolverr-proxy
-        image: {{ .Values.images.flaresolverrProxy }}
-        env:
-        - name: FLARESOLVERR_URL
-          value: "http://localhost:8191"
-        - name: LISTEN_PORT
-          value: "8118"
-        - name: LOG_LEVEL
-          value: info
-
       # --- AUTO-LINKER SIDE CAR ---
       - name: arr-linker
         image: alpine
         command: ["/bin/sh", "-c"]
         args:
           - |
-            apk add --no-cache curl jq
+            apk add --no-cache curl jq python3 py3-requests
             API_KEY=$(cat /run/shared/api_key)
             PASSWORD=$(cat /run/shared/password)
 
+            # --- TRANSPARENT FLARESOLVERR PROXY ---
+            cat <<'PYEOF' > /tmp/proxy.py
+            import http.server
+            import socketserver
+            import requests
+            import json
+
+            FLARESOLVERR_URL = "http://localhost:8191/v1"
+            PORT = 8118
+
+            class FlareProxy(http.server.BaseHTTPRequestHandler):
+                def do_GET(self):
+                    self.handle_request("get")
+                def do_POST(self):
+                    self.handle_request("post")
+
+                def handle_request(self, method):
+                    print(f"Proxying {method} request for {self.path}")
+                    payload = {
+                        "cmd": f"request.{method}",
+                        "url": self.path,
+                        "maxTimeout": 60000
+                    }
+                    try:
+                        resp = requests.post(FLARESOLVERR_URL, json=payload, timeout=70)
+                        data = resp.json()
+                        if data.get("status") == "ok":
+                            solution = data.get("solution", {})
+                            self.send_response(200)
+                            self.send_header("Content-Type", "text/html")
+                            self.end_headers()
+                            self.wfile.write(solution.get("response", "").encode())
+                        else:
+                            self.send_error(502, f"FlareSolverr Error: {data.get('message')}")
+                    except Exception as e:
+                        self.send_error(500, str(e))
+
+            with socketserver.TCPServer(("", PORT), FlareProxy) as httpd:
+                print(f"FlareSolverr Bridge listening on {PORT}")
+                httpd.serve_forever()
+            PYEOF
+            # Fix Python indentation in the script
+            sed -i 's/^            //' /tmp/proxy.py
+            python3 /tmp/proxy.py &
+            
             # Wait for all services to be ready
             echo "Waiting for stack to wake up..."
             until curl -s "http://localhost:9696/api/v1/system/status?apikey=$API_KEY" | grep -q "version"; do sleep 5; done
             until curl -s "http://localhost:7878/api/v3/system/status?apikey=$API_KEY" | grep -q "version"; do sleep 5; done
             until curl -s "http://localhost:8989/api/v3/system/status?apikey=$API_KEY" | grep -q "version"; do sleep 5; done
-            # until curl -s "http://localhost:5055/api/v1/status" | grep -q "version"; do sleep 5; done
 
             echo "All services up. Linking..."
 
@@ -305,14 +339,12 @@ spec:
 
             while true; do
               # 6. Auto-tag Indexers for FlareSolverr
-              # Create tag if not exists
               TAG_ID=$(curl -s "http://localhost:9696/api/v1/tag?apikey=$API_KEY" | jq -r ".[] | select(.label == \"flaresolverr\") | .id")
               if [ -z "$TAG_ID" ] || [ "$TAG_ID" == "null" ]; then
                 TAG_ID=$(curl -s -X POST "http://localhost:9696/api/v1/tag?apikey=$API_KEY" -H "Content-Type: application/json" -d "{\"label\": \"flaresolverr\"}" | jq -r ".id")
               fi
               
               if [ ! -z "$TAG_ID" ] && [ "$TAG_ID" != "null" ]; then
-                # Apply tag to FlareSolverr proxy if not already tagged
                 PROXY=$(curl -s "http://localhost:9696/api/v1/indexerproxy?apikey=$API_KEY" | jq -c ".[] | select(.name == \"FlareSolverr\")")
                 PROXY_ID=$(echo "$PROXY" | jq -r ".id")
                 if ! echo "$PROXY" | jq -e ".tags | contains([$TAG_ID])" > /dev/null; then
@@ -321,7 +353,6 @@ spec:
                   curl -s -X PUT "http://localhost:9696/api/v1/indexerproxy/$PROXY_ID?apikey=$API_KEY" -H "Content-Type: application/json" -d "$UPDATED_PROXY" > /dev/null
                 fi
 
-                # Apply tag to all indexers (The "Automatic" part)
                 INDEXERS_JSON=$(curl -s "http://localhost:9696/api/v1/indexer?apikey=$API_KEY")
                 INDEXER_IDS=$(echo "$INDEXERS_JSON" | jq -r ".[] | .id")
                 for ID in $INDEXER_IDS; do
@@ -333,7 +364,6 @@ spec:
                   fi
                 done
               fi
-
               sleep 60
             done
         volumeMounts:
