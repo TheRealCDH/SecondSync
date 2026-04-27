@@ -63,7 +63,7 @@ spec:
         - name: config-transmission
           mountPath: /config
         - name: media
-          mountPath: /media
+          mountPath: /downloads
 
       - name: sonarr
         image: {{ .Values.images.sonarr }}
@@ -72,6 +72,8 @@ spec:
           mountPath: /config
         - name: media
           mountPath: /media
+        - name: media
+          mountPath: /downloads
 
       - name: radarr
         image: {{ .Values.images.radarr }}
@@ -80,6 +82,8 @@ spec:
           mountPath: /config
         - name: media
           mountPath: /media
+        - name: media
+          mountPath: /downloads
 
       - name: prowlarr
         image: {{ .Values.images.prowlarr }}
