@@ -184,11 +184,14 @@ data:
       # 3. ARM Config Patching
       ARM_CONF="/arm-config/arm.yaml"
       if [ -f "$ARM_CONF" ]; then
-        if ! grep -q "COMPLETED_PATH: \"/home/arm/media/Movies/\"" "$ARM_CONF"; then
-          echo "Patching ARM configuration paths..."
+        if ! grep -q "SKIP_TRANSCODE: true" "$ARM_CONF"; then
+          echo "Patching ARM configuration for direct rips and no login..."
           sed -i 's|RAW_PATH:.*|RAW_PATH: "/home/arm/media/.arm/raw/"|' "$ARM_CONF"
           sed -i 's|TRANSCODE_PATH:.*|TRANSCODE_PATH: "/home/arm/media/.arm/transcode/"|' "$ARM_CONF"
           sed -i 's|COMPLETED_PATH:.*|COMPLETED_PATH: "/home/arm/media/Movies/"|' "$ARM_CONF"
+          sed -i 's|DISABLE_LOGIN:.*|DISABLE_LOGIN: true|' "$ARM_CONF"
+          sed -i 's|SKIP_TRANSCODE:.*|SKIP_TRANSCODE: true|' "$ARM_CONF"
+          sed -i 's|RIPMETHOD:.*|RIPMETHOD: "mkv"|' "$ARM_CONF"
           mkdir -p /home/arm/media/.arm/raw /home/arm/media/.arm/transcode
           chown -R 1000:1000 /home/arm/media/.arm
         fi
