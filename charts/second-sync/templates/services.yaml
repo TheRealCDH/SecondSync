@@ -115,6 +115,20 @@ spec:
     targetPort: 8080
     nodePort: {{ .Values.ports.arm }}
 ---
+# Headlamp (Managed)
+apiVersion: v1
+kind: Service
+metadata:
+  name: headlamp
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: headlamp
+  ports:
+  - port: 80
+    targetPort: 80
+    nodePort: {{ .Values.ports.headlamp }}
+---
 # Homepage
 apiVersion: v1
 kind: Service

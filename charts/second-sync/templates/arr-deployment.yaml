@@ -217,6 +217,8 @@ spec:
         env:
         - name: HOMEPAGE_ALLOWED_HOSTS
           value: "*"
+        - name: SAFE_MODE
+          value: "true"
         volumeMounts:
         - name: shared-keys
           mountPath: /run/shared

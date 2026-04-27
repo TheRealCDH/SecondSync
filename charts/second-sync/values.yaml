@@ -22,6 +22,7 @@ ports:
   arm: 30008
   transmissionPeer: 31413
   homepage: 30000
+  headlamp: 30010
 
 # Transmission Credentials
 transmission:

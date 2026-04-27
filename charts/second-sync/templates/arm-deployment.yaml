@@ -32,6 +32,13 @@ spec:
             elif ! grep -q "app_EnableAutoKey" "$FILE"; then
               echo 'app_EnableAutoKey="1"' >> "$FILE"
             fi
+
+            # Permanent patch for main.py (AttributeError fix)
+            # This is a hack to patch the RO filesystem if needed, but since it's /opt/arm
+            # we check if we can write to it or if we need a shared mount.
+            # Actually ARM image has /opt/arm as part of the image. 
+            # We can't easily patch it from initContainer unless we use a volume for /opt/arm
+            # Let's try to do it in the container start instead.
         volumeMounts:
         - name: config-arm
           mountPath: /home/arm
@@ -40,9 +47,16 @@ spec:
           mountPath: /etc/arm/config
           subPath: config
       containers:
-
       - name: arm
         image: {{ .Values.images.arm }}
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            # Apply permanent patch for main.py
+            sed -i 's/job_length.seconds/getattr(job_length, "seconds", 0)/g' /opt/arm/arm/ripper/main.py
+            sed -i 's/job_length.days/getattr(job_length, "days", 0)/g' /opt/arm/arm/ripper/main.py
+            # Start the original entrypoint
+            exec /init
         securityContext:
           privileged: true
         env:
@@ -50,7 +64,10 @@ spec:
           value: "1000"
         - name: ARM_GID
           value: "1000"
+        - name: DISABLE_LOGIN
+          value: "true"
         volumeMounts:
+
         - name: config-arm
           mountPath: /home/arm
           subPath: home
