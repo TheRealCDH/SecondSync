@@ -21,15 +21,23 @@ spec:
         command: ["/bin/sh", "-c"]
         args:
           - |
+            # Derive a 32-char hex string from the Wireguard key
             RAW_KEY=$(cat /etc/vpn/mull.key | tr -d '\n\r ')
             echo "$RAW_KEY" | sha256sum | cut -c1-32 > /run/shared/api_key
             echo "$RAW_KEY" | sha256sum | cut -c1-16 > /run/shared/password
+            
+            # Fix ARM config directory permissions
+            echo "Fixing ARM config permissions..."
+            chown -R 1000:1000 /home/arm
         volumeMounts:
         - name: vpn-key
           mountPath: /etc/vpn/mull.key
           readOnly: true
         - name: shared-keys
           mountPath: /run/shared
+        - name: config-arm
+          mountPath: /home/arm
+
       containers:
       # --- VPN GATEWAY ---
       - name: gluetun
