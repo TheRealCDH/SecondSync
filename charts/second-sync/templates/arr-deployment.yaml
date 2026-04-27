@@ -32,18 +32,15 @@ spec:
           value: "mullvad"
         - name: VPN_TYPE
           value: "wireguard"
-        - name: WIREGUARD_ADDRESSES
-          value: "10.72.231.112/32"
-        - name: FIREWALL_OUTBOUND_SUBNETS
-          value: {{ .Values.vpn.localSubnets | quote }}
-        - name: SERVER_COUNTRIES
-          value: "Netherlands"
-        - name: VPN_ENDPOINT_IP
+        - name: WIREGUARD_ENDPOINT_IP
           value: "77.243.184.130"
-        - name: VPN_ENDPOINT_PORT
+        - name: WIREGUARD_ENDPOINT_PORT
           value: "51820"
         - name: WIREGUARD_PUBLIC_KEY
           value: "5ioE7vTw80KVx0S/zYOZonR5ZkR+uiNJogR9Pyqtwzg="
+        - name: WIREGUARD_ADDRESSES
+          value: "10.72.231.112/32"
+        - name: FIREWALL_OUTBOUND_SUBNETS
         volumeMounts:
         - name: vpn-key
           mountPath: /etc/vpn/mull.key
