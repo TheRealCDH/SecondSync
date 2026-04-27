@@ -76,11 +76,9 @@ data:
 
     # 3. Add Root Folders
     if ! curl -s "http://localhost:7878/api/v3/rootfolder?apikey=$API_KEY" | jq -e ".[]" > /dev/null; then
-      echo "Adding Radarr Root Folder..."
       curl -s -X POST "http://localhost:7878/api/v3/rootfolder?apikey=$API_KEY" -H "Content-Type: application/json" -d "{\"path\": \"/downloads/Movies\"}"
     fi
     if ! curl -s "http://localhost:8989/api/v3/rootfolder?apikey=$API_KEY" | jq -e ".[]" > /dev/null; then
-      echo "Adding Sonarr Root Folder..."
       curl -s -X POST "http://localhost:8989/api/v3/rootfolder?apikey=$API_KEY" -H "Content-Type: application/json" -d "{\"path\": \"/downloads/TV Shows\"}"
     fi
 
@@ -115,6 +113,14 @@ data:
         if ! curl -s -X GET "http://localhost:5055/api/v1/settings/sonarr" -H "X-Api-Key: $API_KEY" | jq -e ".[]" > /dev/null; then
           curl -s -X POST "http://localhost:5055/api/v1/settings/sonarr" -H "X-Api-Key: $API_KEY" -H "Content-Type: application/json" \
             -d "{\"name\": \"Sonarr\", \"hostname\": \"localhost\", \"port\": 8989, \"apiKey\": \"$API_KEY\", \"useSsl\": false, \"baseUrl\": \"\", \"activeProfileId\": 1, \"activeProfileName\": \"Any\", \"activeDirectory\": \"/downloads/TV Shows\", \"isDefault\": true, \"syncLevel\": 1, \"is4k\": false, \"enableSeasonFolders\": true}"
+        fi
+
+        # Update Jellyfin connection to use internal DNS if it's currently using Tailscale IP
+        JELLYFIN_CONF=$(curl -s -X GET "http://localhost:5055/api/v1/settings/jellyfin" -H "X-Api-Key: $API_KEY")
+        if echo "$JELLYFIN_CONF" | grep -q "100.67.54.105"; then
+           echo "Updating Jellyfin link to use internal DNS..."
+           curl -s -X POST "http://localhost:5055/api/v1/settings/jellyfin" -H "X-Api-Key: $API_KEY" -H "Content-Type: application/json" \
+             -d "{\"name\": \"Main\", \"hostname\": \"jellyfin\", \"port\": 8096, \"apiKey\": \"$(echo "$JELLYFIN_CONF" | jq -r .apiKey)\", \"useSsl\": false}"
         fi
       fi
 
