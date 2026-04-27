@@ -21,14 +21,9 @@ spec:
         command: ["/bin/sh", "-c"]
         args:
           - |
-            # Derive a 32-char hex string from the Wireguard key
             RAW_KEY=$(cat /etc/vpn/mull.key | tr -d '\n\r ')
             echo "$RAW_KEY" | sha256sum | cut -c1-32 > /run/shared/api_key
-            # Derive a 16-char password
             echo "$RAW_KEY" | sha256sum | cut -c1-16 > /run/shared/password
-            
-            API_KEY=$(cat /run/shared/api_key)
-            echo "Derived deterministic API Key: $API_KEY"
         volumeMounts:
         - name: vpn-key
           mountPath: /etc/vpn/mull.key
@@ -207,122 +202,25 @@ spec:
         - name: TZ
           value: UTC
 
-      - name: flaresolverr-proxy
-        image: {{ .Values.images.flaresolverrProxy }}
-        env:
-        - name: FLARESOLVERR_URL
-          value: "http://localhost:8191"
-        - name: PROXY_PORT
-          value: "8118"
-
       # --- AUTO-LINKER SIDE CAR ---
       - name: arr-linker
         image: python:3.11-alpine
-        command: ["/bin/sh", "-c"]
-        args:
-          - |
-            # Wait for VPN and Internet
-            echo "Waiting for internet connectivity..."
-            until ping -c 1 google.com > /dev/null 2>&1; do sleep 2; done
-            apk add --no-cache curl jq
-            
-            API_KEY=$(cat /run/shared/api_key)
-            PASSWORD=$(cat /run/shared/password)
-
-            # Wait for services
-            echo "Waiting for stack to wake up..."
-            until curl -s "http://localhost:9696/api/v1/system/status?apikey=$API_KEY" | grep -q "version"; do sleep 5; done
-            until curl -s "http://localhost:7878/api/v3/system/status?apikey=$API_KEY" | grep -q "version"; do sleep 5; done
-            until curl -s "http://localhost:8989/api/v3/system/status?apikey=$API_KEY" | grep -q "version"; do sleep 5; done
-
-            echo "All services up. Linking..."
-
-            # 1. Prowlarr -> Radarr
-            if ! curl -s "http://localhost:9696/api/v1/applications?apikey=$API_KEY" | jq -e ".[] | select(.name == \"Radarr\")" > /dev/null; then
-              echo "Adding Radarr to Prowlarr..."
-              curl -s -X POST "http://localhost:9696/api/v1/applications?apikey=$API_KEY" -H "Content-Type: application/json" \
-                -d "{\"name\": \"Radarr\", \"enabled\": true, \"configContract\": \"RadarrSettings\", \"implementation\": \"Radarr\", \"fields\": [{\"name\": \"baseUrl\", \"value\": \"http://localhost:7878\"}, {\"name\": \"apiKey\", \"value\": \"$API_KEY\"}, {\"name\": \"syncLevel\", \"value\": \"fullSync\"}]}"
-            fi
-
-            # 2. Prowlarr -> Sonarr
-            if ! curl -s "http://localhost:9696/api/v1/applications?apikey=$API_KEY" | jq -e ".[] | select(.name == \"Sonarr\")" > /dev/null; then
-              echo "Adding Sonarr to Prowlarr..."
-              curl -s -X POST "http://localhost:9696/api/v1/applications?apikey=$API_KEY" -H "Content-Type: application/json" \
-                -d "{\"name\": \"Sonarr\", \"enabled\": true, \"configContract\": \"SonarrSettings\", \"implementation\": \"Sonarr\", \"fields\": [{\"name\": \"baseUrl\", \"value\": \"http://localhost:8989\"}, {\"name\": \"apiKey\", \"value\": \"$API_KEY\"}, {\"name\": \"syncLevel\", \"value\": \"fullSync\"}]}"
-            fi
-
-            # 3. Radarr -> Transmission
-            if ! curl -s "http://localhost:7878/api/v3/downloadclient?apikey=$API_KEY" | jq -e ".[] | select(.name == \"Transmission\")" > /dev/null; then
-              echo "Adding Transmission to Radarr..."
-              curl -s -X POST "http://localhost:7878/api/v3/downloadclient?apikey=$API_KEY" -H "Content-Type: application/json" \
-                -d "{\"name\": \"Transmission\", \"enable\": true, \"priority\": 1, \"implementation\": \"Transmission\", \"configContract\": \"TransmissionSettings\", \"fields\": [{\"name\": \"host\", \"value\": \"localhost\"}, {\"name\": \"port\", \"value\": 9091}, {\"name\": \"username\", \"value\": \"admin\"}, {\"name\": \"password\", \"value\": \"$PASSWORD\"}]}"
-            fi
-
-            # 4. Sonarr -> Transmission
-            if ! curl -s "http://localhost:8989/api/v3/downloadclient?apikey=$API_KEY" | jq -e ".[] | select(.name == \"Transmission\")" > /dev/null; then
-              echo "Adding Transmission to Sonarr..."
-              curl -s -X POST "http://localhost:8989/api/v3/downloadclient?apikey=$API_KEY" -H "Content-Type: application/json" \
-                -d "{\"name\": \"Transmission\", \"enable\": true, \"priority\": 1, \"implementation\": \"Transmission\", \"configContract\": \"TransmissionSettings\", \"fields\": [{\"name\": \"host\", \"value\": \"localhost\"}, {\"name\": \"port\", \"value\": 9091}, {\"name\": \"username\", \"value\": \"admin\"}, {\"name\": \"password\", \"value\": \"$PASSWORD\"}]}"
-            fi
-
-            # 5. Prowlarr -> FlareSolverr (API)
-            if ! curl -s "http://localhost:9696/api/v1/indexerproxy?apikey=$API_KEY" | jq -e ".[] | select(.name == \"FlareSolverr\")" > /dev/null; then
-              echo "Adding FlareSolverr API to Prowlarr..."
-              curl -s -X POST "http://localhost:9696/api/v1/indexerproxy?apikey=$API_KEY" -H "Content-Type: application/json" \
-                -d "{\"name\": \"FlareSolverr\", \"enabled\": true, \"implementation\": \"FlareSolverr\", \"configContract\": \"FlareSolverrSettings\", \"fields\": [{\"name\": \"host\", \"value\": \"http://localhost:8191\"}, {\"name\": \"requestTimeout\", \"value\": 60}]}"
-            fi
-
-            echo "Automation complete. Entering patching loop..."
-
-            while true; do
-              # Patch Jellyseerr if it's finally ready
-              FILE="/jellyseerr/settings.json"
-              if [ -f "$FILE" ] && jq -e ".main" "$FILE" > /dev/null; then
-                if [ "$(jq -r '.main.apiKey' "$FILE")" != "$API_KEY" ]; then
-                  echo "Patching Jellyseerr API key..."
-                  TMP=$(mktemp)
-                  jq --arg key "$API_KEY" '.main.apiKey = $key' "$FILE" > "$TMP" && mv "$TMP" "$FILE"
-                fi
-              fi
-
-              # Auto-tag Indexers for FlareSolverr
-              TAG_ID=$(curl -s "http://localhost:9696/api/v1/tag?apikey=$API_KEY" | jq -r ".[] | select(.label == \"flaresolverr\") | .id")
-              if [ -z "$TAG_ID" ] || [ "$TAG_ID" == "null" ]; then
-                TAG_ID=$(curl -s -X POST "http://localhost:9696/api/v1/tag?apikey=$API_KEY" -H "Content-Type: application/json" -d "{\"label\": \"flaresolverr\"}" | jq -r ".id")
-              fi
-              
-              if [ ! -z "$TAG_ID" ] && [ "$TAG_ID" != "null" ]; then
-                PROXY=$(curl -s "http://localhost:9696/api/v1/indexerproxy?apikey=$API_KEY" | jq -c ".[] | select(.name == \"FlareSolverr\")")
-                PROXY_ID=$(echo "$PROXY" | jq -r ".id")
-                if ! echo "$PROXY" | jq -e ".tags | contains([$TAG_ID])" > /dev/null; then
-                  echo "Applying flaresolverr tag to FlareSolverr proxy..."
-                  UPDATED_PROXY=$(echo "$PROXY" | jq -c ".tags = ( .tags + [$TAG_ID] | unique )")
-                  curl -s -X PUT "http://localhost:9696/api/v1/indexerproxy/$PROXY_ID?apikey=$API_KEY" -H "Content-Type: application/json" -d "$UPDATED_PROXY" > /dev/null
-                fi
-
-                INDEXERS_JSON=$(curl -s "http://localhost:9696/api/v1/indexer?apikey=$API_KEY")
-                INDEXER_IDS=$(echo "$INDEXERS_JSON" | jq -r ".[] | .id")
-                for ID in $INDEXER_IDS; do
-                  INDEXER=$(echo "$INDEXERS_JSON" | jq -c ".[] | select(.id == $ID)")
-                  if ! echo "$INDEXER" | jq -e ".tags | contains([$TAG_ID])" > /dev/null; then
-                    echo "Applying flaresolverr tag to indexer $ID..."
-                    UPDATED_INDEXER=$(echo "$INDEXER" | jq -c ".tags = ( .tags + [$TAG_ID] | unique )")
-                    curl -s -X PUT "http://localhost:9696/api/v1/indexer/$ID?apikey=$API_KEY" -H "Content-Type: application/json" -d "$UPDATED_INDEXER" > /dev/null
-                  fi
-                done
-              fi
-              sleep 60
-            done
+        command: ["/bin/sh", "/run/scripts/linker.sh"]
         volumeMounts:
         - name: shared-keys
           mountPath: /run/shared
           readOnly: true
+        - name: arr-scripts
+          mountPath: /run/scripts
         - name: config-overseerr
           mountPath: /jellyseerr
 
       volumes:
       - name: shared-keys
         emptyDir: {}
+      - name: arr-scripts
+        configMap:
+          name: arr-scripts
       - name: vpn-key
         hostPath:
           path: /root/mull.key
