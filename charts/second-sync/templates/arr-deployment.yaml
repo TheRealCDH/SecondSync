@@ -215,29 +215,6 @@ spec:
         - name: TZ
           value: UTC
 
-      - name: arm
-        image: {{ .Values.images.arm }}
-        securityContext:
-          privileged: true
-        env:
-        - name: ARM_UID
-          value: "1000"
-        - name: ARM_GID
-          value: "1000"
-        volumeMounts:
-        - name: config-arm
-          mountPath: /home/arm
-          subPath: home
-        - name: config-arm
-          mountPath: /etc/arm/config
-          subPath: config
-        - name: media
-          mountPath: /home/arm/media
-        - name: dev-sr0
-          mountPath: /dev/sr0
-        - name: dev-sg5
-          mountPath: /dev/sg5
-
       # --- AUTO-LINKER SIDE CAR ---
       - name: arr-linker
         image: python:3.11-alpine
@@ -292,12 +269,3 @@ spec:
       - name: config-overseerr
         persistentVolumeClaim:
           claimName: overseerr-config-pvc
-      - name: config-arm
-        persistentVolumeClaim:
-          claimName: arm-config-pvc
-      - name: dev-sr0
-        hostPath:
-          path: /dev/sr0
-      - name: dev-sg5
-        hostPath:
-          path: /dev/sg5
