@@ -21,7 +21,6 @@ spec:
         command: ["/bin/sh", "-c"]
         args:
           - |
-            apk add --no-cache jq
             # Derive a 32-char hex string from the Wireguard key
             RAW_KEY=$(cat /etc/vpn/mull.key | tr -d '\n\r ')
             echo "$RAW_KEY" | sha256sum | cut -c1-32 > /run/shared/api_key
@@ -30,23 +29,12 @@ spec:
             
             API_KEY=$(cat /run/shared/api_key)
             echo "Derived deterministic API Key: $API_KEY"
-
-            # Patch Jellyseerr config
-            CONFIG_FILE="/jellyseerr/settings.json"
-            if [ ! -f "$CONFIG_FILE" ]; then
-              echo '{"main":{}}' > "$CONFIG_FILE"
-            fi
-            TMP_FILE=$(mktemp)
-            jq --arg key "$API_KEY" '.main.apiKey = $key' "$CONFIG_FILE" > "$TMP_FILE" && mv "$TMP_FILE" "$CONFIG_FILE"
-            echo "Jellyseerr API key patched."
         volumeMounts:
         - name: vpn-key
           mountPath: /etc/vpn/mull.key
           readOnly: true
         - name: shared-keys
           mountPath: /run/shared
-        - name: config-overseerr
-          mountPath: /jellyseerr
       containers:
       # --- VPN GATEWAY ---
       - name: gluetun
@@ -230,48 +218,30 @@ spec:
             PASSWORD=$(cat /run/shared/password)
 
             # --- TRANSPARENT FLARESOLVERR PROXY ---
-            cat <<'PYEOF' > /tmp/proxy.py
-            import http.server
-            import socketserver
-            import requests
-            import json
-
-            FLARESOLVERR_URL = "http://localhost:8191/v1"
-            PORT = 8118
-
-            class FlareProxy(http.server.BaseHTTPRequestHandler):
-                def do_GET(self):
-                    self.handle_request("get")
-                def do_POST(self):
-                    self.handle_request("post")
-
-                def handle_request(self, method):
-                    print(f"Proxying {method} request for {self.path}")
-                    payload = {
-                        "cmd": f"request.{method}",
-                        "url": self.path,
-                        "maxTimeout": 60000
-                    }
-                    try:
-                        resp = requests.post(FLARESOLVERR_URL, json=payload, timeout=70)
-                        data = resp.json()
-                        if data.get("status") == "ok":
-                            solution = data.get("solution", {})
-                            self.send_response(200)
-                            self.send_header("Content-Type", "text/html")
-                            self.end_headers()
-                            self.wfile.write(solution.get("response", "").encode())
-                        else:
-                            self.send_error(502, f"FlareSolverr Error: {data.get('message')}")
-                    except Exception as e:
-                        self.send_error(500, str(e))
-
-            with socketserver.TCPServer(("", PORT), FlareProxy) as httpd:
-                print(f"FlareSolverr Bridge listening on {PORT}")
-                httpd.serve_forever()
-            PYEOF
-            # Fix Python indentation in the script
-            sed -i 's/^            //' /tmp/proxy.py
+            # Simplified python script to avoid indentation hell in YAML
+            cat <<'EOF' > /tmp/proxy.py
+import http.server, socketserver, requests, json
+FLARESOLVERR_URL = "http://localhost:8191/v1"
+PORT = 8118
+class FlareProxy(http.server.BaseHTTPRequestHandler):
+    def do_GET(self): self.handle_request("get")
+    def do_POST(self): self.handle_request("post")
+    def handle_request(self, method):
+        payload = {"cmd": f"request.{method}", "url": self.path, "maxTimeout": 60000}
+        try:
+            resp = requests.post(FLARESOLVERR_URL, json=payload, timeout=70)
+            data = resp.json()
+            if data.get("status") == "ok":
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html")
+                self.end_headers()
+                self.wfile.write(data.get("solution", {}).get("response", "").encode())
+            else:
+                self.send_error(502, f"FlareSolverr Error: {data.get('message')}")
+        except Exception as e: self.send_error(500, str(e))
+with socketserver.TCPServer(("", PORT), FlareProxy) as httpd:
+    httpd.serve_forever()
+EOF
             python3 /tmp/proxy.py &
             
             # Wait for all services to be ready
@@ -286,28 +256,28 @@ spec:
             if ! curl -s "http://localhost:9696/api/v1/applications?apikey=$API_KEY" | jq -e ".[] | select(.name == \"Radarr\")" > /dev/null; then
               echo "Adding Radarr to Prowlarr..."
               curl -s -X POST "http://localhost:9696/api/v1/applications?apikey=$API_KEY" -H "Content-Type: application/json" \
-                -d "{\"name\": \"Radarr\", \"configContract\": \"RadarrSettings\", \"implementation\": \"Radarr\", \"fields\": [{\"name\": \"baseUrl\", \"value\": \"http://localhost:7878\"}, {\"name\": \"apiKey\", \"value\": \"$API_KEY\"}, {\"name\": \"syncLevel\", \"value\": \"fullSync\"}]}"
+                -d "{\"name\": \"Radarr\", \"enabled\": true, \"configContract\": \"RadarrSettings\", \"implementation\": \"Radarr\", \"fields\": [{\"name\": \"baseUrl\", \"value\": \"http://localhost:7878\"}, {\"name\": \"apiKey\", \"value\": \"$API_KEY\"}, {\"name\": \"syncLevel\", \"value\": \"fullSync\"}]}"
             fi
 
             # 2. Prowlarr -> Sonarr
             if ! curl -s "http://localhost:9696/api/v1/applications?apikey=$API_KEY" | jq -e ".[] | select(.name == \"Sonarr\")" > /dev/null; then
               echo "Adding Sonarr to Prowlarr..."
               curl -s -X POST "http://localhost:9696/api/v1/applications?apikey=$API_KEY" -H "Content-Type: application/json" \
-                -d "{\"name\": \"Sonarr\", \"configContract\": \"SonarrSettings\", \"implementation\": \"Sonarr\", \"fields\": [{\"name\": \"baseUrl\", \"value\": \"http://localhost:8989\"}, {\"name\": \"apiKey\", \"value\": \"$API_KEY\"}, {\"name\": \"syncLevel\", \"value\": \"fullSync\"}]}"
+                -d "{\"name\": \"Sonarr\", \"enabled\": true, \"configContract\": \"SonarrSettings\", \"implementation\": \"Sonarr\", \"fields\": [{\"name\": \"baseUrl\", \"value\": \"http://localhost:8989\"}, {\"name\": \"apiKey\", \"value\": \"$API_KEY\"}, {\"name\": \"syncLevel\", \"value\": \"fullSync\"}]}"
             fi
 
             # 3. Radarr -> Transmission
             if ! curl -s "http://localhost:7878/api/v3/downloadclient?apikey=$API_KEY" | jq -e ".[] | select(.name == \"Transmission\")" > /dev/null; then
               echo "Adding Transmission to Radarr..."
               curl -s -X POST "http://localhost:7878/api/v3/downloadclient?apikey=$API_KEY" -H "Content-Type: application/json" \
-                -d "{\"name\": \"Transmission\", \"implementation\": \"Transmission\", \"configContract\": \"TransmissionSettings\", \"fields\": [{\"name\": \"host\", \"value\": \"localhost\"}, {\"name\": \"port\", \"value\": 9091}, {\"name\": \"username\", \"value\": \"admin\"}, {\"name\": \"password\", \"value\": \"$PASSWORD\"}]}"
+                -d "{\"name\": \"Transmission\", \"enable\": true, \"priority\": 1, \"implementation\": \"Transmission\", \"configContract\": \"TransmissionSettings\", \"fields\": [{\"name\": \"host\", \"value\": \"localhost\"}, {\"name\": \"port\", \"value\": 9091}, {\"name\": \"username\", \"value\": \"admin\"}, {\"name\": \"password\", \"value\": \"$PASSWORD\"}]}"
             fi
 
             # 4. Sonarr -> Transmission
             if ! curl -s "http://localhost:8989/api/v3/downloadclient?apikey=$API_KEY" | jq -e ".[] | select(.name == \"Transmission\")" > /dev/null; then
               echo "Adding Transmission to Sonarr..."
               curl -s -X POST "http://localhost:8989/api/v3/downloadclient?apikey=$API_KEY" -H "Content-Type: application/json" \
-                -d "{\"name\": \"Transmission\", \"implementation\": \"Transmission\", \"configContract\": \"TransmissionSettings\", \"fields\": [{\"name\": \"host\", \"value\": \"localhost\"}, {\"name\": \"port\", \"value\": 9091}, {\"name\": \"username\", \"value\": \"admin\"}, {\"name\": \"password\", \"value\": \"$PASSWORD\"}]}"
+                -d "{\"name\": \"Transmission\", \"enable\": true, \"priority\": 1, \"implementation\": \"Transmission\", \"configContract\": \"TransmissionSettings\", \"fields\": [{\"name\": \"host\", \"value\": \"localhost\"}, {\"name\": \"port\", \"value\": 9091}, {\"name\": \"username\", \"value\": \"admin\"}, {\"name\": \"password\", \"value\": \"$PASSWORD\"}]}"
             fi
 
             # 5. Prowlarr -> FlareSolverr (Special API Integration)
@@ -317,26 +287,26 @@ spec:
                 -d "{\"name\": \"FlareSolverr\", \"enabled\": true, \"implementation\": \"FlareSolverr\", \"configContract\": \"FlareSolverrSettings\", \"fields\": [{\"name\": \"host\", \"value\": \"http://localhost:8191\"}, {\"name\": \"requestTimeout\", \"value\": 60}]}"
             fi
 
-            # 7. Global HTTP Proxy (The "Manual Routing" Fix)
-            # This makes the "Test" button work for all new indexers
+            # 7. Global HTTP Proxy (The \"Manual Routing\" Fix)
             if ! curl -s "http://localhost:9696/api/v1/indexerproxy?apikey=$API_KEY" | jq -e ".[] | select(.name == \"FlareSolverr-Global\")" > /dev/null; then
               echo "Adding FlareSolverr-Global HTTP Proxy..."
               curl -s -X POST "http://localhost:9696/api/v1/indexerproxy?apikey=$API_KEY" -H "Content-Type: application/json" \
-                -d "{
-                  \"name\": \"FlareSolverr-Global\",
-                  \"enabled\": true,
-                  \"implementation\": \"Http\",
-                  \"configContract\": \"HttpSettings\",
-                  \"fields\": [
-                    {\"name\": \"host\", \"value\": \"localhost\"},
-                    {\"name\": \"port\", \"value\": 8118}
-                  ]
-                }"
+                -d "{\"name\": \"FlareSolverr-Global\", \"enabled\": true, \"implementation\": \"Http\", \"configContract\": \"HttpSettings\", \"fields\": [{\"name\": \"host\", \"value\": \"localhost\"}, {\"name\": \"port\", \"value\": 8118}]}"
             fi
 
             echo "All services up. Entering automation loop..."
 
             while true; do
+              # Patch Jellyseerr if it's finally ready
+              FILE="/jellyseerr/settings.json"
+              if [ -f "$FILE" ] && jq -e ".main" "$FILE" > /dev/null; then
+                if [ "$(jq -r '.main.apiKey' "$FILE")" != "$API_KEY" ]; then
+                  echo "Patching Jellyseerr API key..."
+                  TMP=$(mktemp)
+                  jq --arg key "$API_KEY" '.main.apiKey = $key' "$FILE" > "$TMP" && mv "$TMP" "$FILE"
+                fi
+              fi
+
               # 6. Auto-tag Indexers for FlareSolverr
               TAG_ID=$(curl -s "http://localhost:9696/api/v1/tag?apikey=$API_KEY" | jq -r ".[] | select(.label == \"flaresolverr\") | .id")
               if [ -z "$TAG_ID" ] || [ "$TAG_ID" == "null" ]; then
@@ -369,6 +339,8 @@ spec:
         - name: shared-keys
           mountPath: /run/shared
           readOnly: true
+        - name: config-overseerr
+          mountPath: /jellyseerr
 
       volumes:
       - name: shared-keys
