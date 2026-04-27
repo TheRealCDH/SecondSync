@@ -209,6 +209,8 @@ spec:
         command: ["/bin/sh", "-c"]
         args:
           - |
+            mkdir -p /app/config
+            cp /app/config-cm/*.yaml /app/config/
             export HOMEPAGE_VAR_API_KEY=$(cat /run/shared/api_key)
             export HOMEPAGE_VAR_TR_USER={{ .Values.transmission.username | quote }}
             export HOMEPAGE_VAR_TR_PASS={{ .Values.transmission.password | quote }}
@@ -218,10 +220,9 @@ spec:
           mountPath: /run/shared
           readOnly: true
         - name: homepage-config
-          mountPath: /app/config
+          mountPath: /app/config-cm
         - name: config-homepage
-          mountPath: /app/config/logs
-          subPath: logs
+          mountPath: /app/config
 
       # --- AUTO-LINKER SIDE CAR ---
       - name: arr-linker
