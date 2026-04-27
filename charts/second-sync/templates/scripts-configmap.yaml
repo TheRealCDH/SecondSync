@@ -4,7 +4,7 @@ metadata:
   name: arr-scripts
 data:
   proxy.py: |
-    import http.server, socketserver, requests, json
+    import http.server, socketserver, requests, json, time
     FLARESOLVERR_URL = "http://localhost:8191/v1"
     PORT = 8118
     class FlareProxy(http.server.BaseHTTPRequestHandler):
@@ -23,8 +23,15 @@ data:
                 else:
                     self.send_error(502, f"FlareSolverr Error: {data.get('message')}")
             except Exception as e: self.send_error(500, str(e))
-    with socketserver.TCPServer(("", PORT), FlareProxy) as httpd:
-        httpd.serve_forever()
+    
+    print(f"Starting FlareSolverr Proxy on port {PORT}...")
+    while True:
+        try:
+            with socketserver.TCPServer(("", PORT), FlareProxy) as httpd:
+                httpd.serve_forever()
+        except Exception as e:
+            print(f"Proxy crashed: {e}. Restarting in 5s...")
+            time.sleep(5)
 
   linker.sh: |
     #!/bin/sh
@@ -37,7 +44,7 @@ data:
     PASSWORD=$(cat /run/shared/password)
 
     # Start FlareSolverr Proxy
-    python3 /run/scripts/proxy.py &
+    python3 /run/scripts/proxy.py > /tmp/proxy.log 2>&1 &
     
     # Wait for services
     echo "Waiting for stack to wake up..."
@@ -90,10 +97,6 @@ data:
         -d "{\"name\": \"FlareSolverr-Global\", \"enabled\": true, \"implementation\": \"Http\", \"configContract\": \"HttpSettings\", \"fields\": [{\"name\": \"host\", \"value\": \"localhost\"}, {\"name\": \"port\", \"value\": 8118}]}"
     fi
 
-    # 8. Jellyseerr -> Radarr/Sonarr/Jellyfin
-    # Note: Jellyseerr needs the API Key to be set in settings.json first, which happens in the loop below.
-    # But for the first run, we can also use the API once it's up.
-    
     echo "Automation complete. Entering loop..."
     while true; do
       FILE="/jellyseerr/settings.json"
@@ -107,14 +110,14 @@ data:
         if ! curl -s -X GET "http://localhost:5055/api/v1/settings/radarr" -H "X-Api-Key: $API_KEY" | jq -e ".[]" > /dev/null; then
           echo "Linking Radarr to Jellyseerr..."
           curl -s -X POST "http://localhost:5055/api/v1/settings/radarr" -H "X-Api-Key: $API_KEY" -H "Content-Type: application/json" \
-            -d "{\"name\": \"Radarr\", \"hostname\": \"localhost\", \"port\": 7878, \"apiKey\": \"$API_KEY\", \"useSsl\": false, \"baseUrl\": \"\", \"activeProfileId\": 1, \"activeDirectory\": \"/downloads/Movies\", \"isDefault\": true, \"syncLevel\": 1, \"is4k\": false}"
+            -d "{\"name\": \"Radarr\", \"hostname\": \"localhost\", \"port\": 7878, \"apiKey\": \"$API_KEY\", \"useSsl\": false, \"baseUrl\": \"\", \"activeProfileId\": 1, \"activeProfileName\": \"Any\", \"activeDirectory\": \"/downloads/Movies\", \"isDefault\": true, \"syncLevel\": 1, \"is4k\": false, \"minimumAvailability\": \"announced\"}"
         fi
 
         # Link Sonarr to Jellyseerr via API
         if ! curl -s -X GET "http://localhost:5055/api/v1/settings/sonarr" -H "X-Api-Key: $API_KEY" | jq -e ".[]" > /dev/null; then
           echo "Linking Sonarr to Jellyseerr..."
           curl -s -X POST "http://localhost:5055/api/v1/settings/sonarr" -H "X-Api-Key: $API_KEY" -H "Content-Type: application/json" \
-            -d "{\"name\": \"Sonarr\", \"hostname\": \"localhost\", \"port\": 8989, \"apiKey\": \"$API_KEY\", \"useSsl\": false, \"baseUrl\": \"\", \"activeProfileId\": 1, \"activeDirectory\": \"/downloads/TV Shows\", \"isDefault\": true, \"syncLevel\": 1, \"is4k\": false}"
+            -d "{\"name\": \"Sonarr\", \"hostname\": \"localhost\", \"port\": 8989, \"apiKey\": \"$API_KEY\", \"useSsl\": false, \"baseUrl\": \"\", \"activeProfileId\": 1, \"activeProfileName\": \"Any\", \"activeDirectory\": \"/downloads/TV Shows\", \"isDefault\": true, \"syncLevel\": 1, \"is4k\": false, \"enableSeasonFolders\": true}"
         fi
       fi
 
