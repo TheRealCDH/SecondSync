@@ -38,6 +38,12 @@ spec:
           value: {{ .Values.vpn.localSubnets | quote }}
         - name: SERVER_COUNTRIES
           value: "Netherlands"
+        - name: VPN_ENDPOINT_IP
+          value: "77.243.184.130"
+        - name: VPN_ENDPOINT_PORT
+          value: "51820"
+        - name: WIREGUARD_PUBLIC_KEY
+          value: "5ioE7vTw80KVx0S/zYOZonR5ZkR+uiNJogR9Pyqtwzg="
         volumeMounts:
         - name: vpn-key
           mountPath: /etc/vpn/mull.key
