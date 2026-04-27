@@ -216,6 +216,16 @@ spec:
         - name: TZ
           value: UTC
 
+      - name: flaresolverr-proxy
+        image: {{ .Values.images.flaresolverrProxy }}
+        env:
+        - name: FLARESOLVERR_URL
+          value: "http://localhost:8191"
+        - name: PROXY_PORT
+          value: "8118"
+        - name: LOG_LEVEL
+          value: info
+
       # --- AUTO-LINKER SIDE CAR ---
       - name: arr-linker
         image: alpine
@@ -263,11 +273,29 @@ spec:
                 -d "{\"name\": \"Transmission\", \"implementation\": \"Transmission\", \"configContract\": \"TransmissionSettings\", \"fields\": [{\"name\": \"host\", \"value\": \"localhost\"}, {\"name\": \"port\", \"value\": 9091}, {\"name\": \"username\", \"value\": \"admin\"}, {\"name\": \"password\", \"value\": \"$PASSWORD\"}]}"
             fi
 
-            # 5. Prowlarr -> FlareSolverr
+            # 5. Prowlarr -> FlareSolverr (Special API Integration)
             if ! curl -s "http://localhost:9696/api/v1/indexerproxy?apikey=$API_KEY" | jq -e ".[] | select(.name == \"FlareSolverr\")" > /dev/null; then
-              echo "Adding FlareSolverr to Prowlarr..."
+              echo "Adding FlareSolverr API to Prowlarr..."
               curl -s -X POST "http://localhost:9696/api/v1/indexerproxy?apikey=$API_KEY" -H "Content-Type: application/json" \
                 -d "{\"name\": \"FlareSolverr\", \"enabled\": true, \"implementation\": \"FlareSolverr\", \"configContract\": \"FlareSolverrSettings\", \"fields\": [{\"name\": \"host\", \"value\": \"http://localhost:8191\"}, {\"name\": \"requestTimeout\", \"value\": 60}]}"
+            fi
+
+            # 7. Global HTTP Proxy (The "Manual Routing" Fix)
+            # This makes the "Test" button work for all new indexers
+            if ! curl -s "http://localhost:9696/api/v1/indexerproxy?apikey=$API_KEY" | jq -e ".[] | select(.name == \"FlareSolverr-Global\")" > /dev/null; then
+              echo "Adding FlareSolverr-Global HTTP Proxy..."
+              curl -s -X POST "http://localhost:9696/api/v1/indexerproxy?apikey=$API_KEY" -H "Content-Type: application/json" \
+                -d "{
+                  \"name\": \"FlareSolverr-Global\",
+                  \"enabled\": true,
+                  \"implementation\": \"HttpProxy\",
+                  \"configContract\": \"HttpProxySettings\",
+                  \"fields\": [
+                    {\"name\": \"host\", \"value\": \"localhost\"},
+                    {\"name\": \"port\", \"value\": 8118},
+                    {\"name\": \"bypassList\", \"value\": \"localhost,127.0.0.1,10.0.0.0/8,100.64.0.0/10\"}
+                  ]
+                }"
             fi
 
             echo "All services up. Entering automation loop..."

@@ -30,3 +30,4 @@ images:
   overseerr: fallenbagel/jellyseerr:latest
   jellyfin: jellyfin/jellyfin:latest
   flaresolverr: ghcr.io/flaresolverr/flaresolverr:latest
+  flaresolverrProxy: diegotreitos/flaresolverr-proxy:latest
