@@ -27,11 +27,21 @@ spec:
             
             # Enable MakeMKV auto-download of keys
             FILE="/home/arm/.MakeMKV/settings.conf"
+            # Current known beta key
+            BETA_KEY="T-sJ5R5BKxhD671U9s0teXbyP19MhCkkkB7rmnNbb1aEHaqveiVqyI3RXGMHDXhoyNUC"
             if [ ! -f "$FILE" ]; then
-              echo 'app_EnableAutoKey="1"' > "$FILE"
+              echo "app_EnableAutoKey=\"1\"" > "$FILE"
+              echo "app_Key = \"$BETA_KEY\"" >> "$FILE"
               chown 1000:1000 "$FILE"
-            elif ! grep -q "app_EnableAutoKey" "$FILE"; then
-              echo 'app_EnableAutoKey="1"' >> "$FILE"
+            else
+              # Ensure AutoKey is enabled
+              if ! grep -q "app_EnableAutoKey" "$FILE"; then
+                echo 'app_EnableAutoKey="1"' >> "$FILE"
+              fi
+              # Ensure key is set
+              if ! grep -q "app_Key" "$FILE"; then
+                echo "app_Key = \"$BETA_KEY\"" >> "$FILE"
+              fi
             fi
 
             # Permanent patch for main.py (AttributeError fix)
@@ -89,6 +99,10 @@ spec:
         args:
           - |
             echo "Starting ARM Insertion Listener..."
+            # Apply permanent patch for main.py (AttributeError fix)
+            sed -i 's/job_length.seconds/getattr(job_length, "seconds", 0)/g' /opt/arm/arm/ripper/main.py
+            sed -i 's/job_length.days/getattr(job_length, "days", 0)/g' /opt/arm/arm/ripper/main.py
+            
             # Fix git safe directory issue
             git config --global --add safe.directory /opt/arm
             LAST_DISC=""
@@ -108,8 +122,6 @@ spec:
                 else
                   # No disc or blkid failed
                   if [ "$LAST_DISC" != "" ]; then
-                    # Double check with a low-level tool if possible
-                    # but for now we'll assume it's removed if blkid fails
                     echo "Disc removed."
                     LAST_DISC=""
                   fi

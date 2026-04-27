@@ -192,6 +192,7 @@ data:
           sed -i 's|DISABLE_LOGIN:.*|DISABLE_LOGIN: true|' "$ARM_CONF"
           sed -i 's|SKIP_TRANSCODE:.*|SKIP_TRANSCODE: true|' "$ARM_CONF"
           sed -i 's|RIPMETHOD:.*|RIPMETHOD: "mkv"|' "$ARM_CONF"
+          sed -i 's|METADATA_PROVIDER:.*|METADATA_PROVIDER: "none"|' "$ARM_CONF"
           mkdir -p /home/arm/media/.arm/raw /home/arm/media/.arm/transcode
           chown -R 1000:1000 /home/arm/media/.arm
         fi
