@@ -20,6 +20,11 @@ ports:
   arm: 30008
   transmissionPeer: 31413
 
+# Transmission Credentials
+transmission:
+  username: admin
+  password: admin
+
 # Image Tags
 images:
   gluetun: qmcgaw/gluetun:latest

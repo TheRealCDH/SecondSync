@@ -42,7 +42,9 @@ data:
     apk add --no-cache curl jq python3 py3-requests
     
     API_KEY=$(cat /run/shared/api_key)
-    PASSWORD=$(cat /run/shared/password)
+    # PASSWORD=$(cat /run/shared/password) # No longer used for Transmission
+    PASSWORD=${TR_PASS:-admin} # Fallback to admin if not set
+    USER=${TR_USER:-admin}
 
     # Start FlareSolverr Proxy
     python3 /run/scripts/proxy.py > /tmp/proxy.log 2>&1 &
@@ -69,10 +71,12 @@ data:
     # 2. Radarr/Sonarr -> Transmission
     for PORT in 7878 8989; do
       if ! curl -s "http://localhost:$PORT/api/v3/downloadclient?apikey=$API_KEY" | jq -e ".[] | select(.name == \"Transmission\")" > /dev/null; then
+        echo "Adding Transmission to app on port $PORT..."
         curl -s -X POST "http://localhost:$PORT/api/v3/downloadclient?apikey=$API_KEY" -H "Content-Type: application/json" \
-          -d "{\"name\": \"Transmission\", \"enable\": true, \"priority\": 1, \"implementation\": \"Transmission\", \"configContract\": \"TransmissionSettings\", \"fields\": [{\"name\": \"host\", \"value\": \"localhost\"}, {\"name\": \"port\", \"value\": 9091}, {\"name\": \"username\", \"value\": \"admin\"}, {\"name\": \"password\", \"value\": \"$PASSWORD\"}]}"
+          -d "{\"name\": \"Transmission\", \"enable\": true, \"priority\": 1, \"implementation\": \"Transmission\", \"configContract\": \"TransmissionSettings\", \"fields\": [{\"name\": \"host\", \"value\": \"localhost\"}, {\"name\": \"port\", \"value\": 9091}, {\"name\": \"username\", \"value\": \"$USER\"}, {\"name\": \"password\", \"value\": \"$PASSWORD\"}]}"
       fi
     done
+
 
     # 3. Add Root Folders
     if ! curl -s "http://localhost:7878/api/v3/rootfolder?apikey=$API_KEY" | jq -e ".[]" > /dev/null; then

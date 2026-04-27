@@ -84,8 +84,8 @@ spec:
         command: ["/bin/sh", "-c"]
         args:
           - |
-            export USER=admin
-            export PASS=$(cat /run/shared/password)
+            export USER={{ .Values.transmission.username }}
+            export PASS={{ .Values.transmission.password }}
             exec /init
         env:
         - name: PUID
@@ -242,6 +242,11 @@ spec:
       - name: arr-linker
         image: python:3.11-alpine
         command: ["/bin/sh", "/run/scripts/linker.sh"]
+        env:
+        - name: TR_USER
+          value: {{ .Values.transmission.username | quote }}
+        - name: TR_PASS
+          value: {{ .Values.transmission.password | quote }}
         volumeMounts:
         - name: shared-keys
           mountPath: /run/shared
