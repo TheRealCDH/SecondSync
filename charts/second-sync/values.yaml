@@ -2,6 +2,7 @@
 nodeName: ripnix
 storageClass: local-path
 mediaHostPath: /MASS/Plex
+# The IP used to access your services over Tailscale
 tailscaleIP: "100.67.54.105"
 
 # VPN Settings (Mullvad)

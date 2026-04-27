@@ -216,7 +216,7 @@ spec:
             exec /usr/local/bin/node server.js
         env:
         - name: HOMEPAGE_ALLOWED_HOSTS
-          value: "100.67.54.105,100.67.54.105:30000,ripnix,ripnix:30000,ripnix.therealcdh.github.ts.net,ripnix.therealcdh.github.ts.net:30000,localhost,localhost:3000,127.0.0.1"
+          value: "*"
         volumeMounts:
         - name: shared-keys
           mountPath: /run/shared

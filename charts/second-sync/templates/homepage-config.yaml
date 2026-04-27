@@ -5,7 +5,7 @@ metadata:
 data:
   settings.yaml: |
     title: SecondSync Dashboard
-    base: http://100.67.54.105:30000
+    base: http://{{ .Values.tailscaleIP }}:30000
     layout:
       Management:
         style: cols-3
@@ -29,7 +29,7 @@ data:
     - Management:
         - Jellyseerr:
             icon: jellyseerr.png
-            href: http://100.67.54.105:30001
+            href: http://{{ .Values.tailscaleIP }}:30001
             description: Request Management
             widget:
               type: jellyseerr
@@ -37,7 +37,7 @@ data:
               key: {{ "{{" }}HOMEPAGE_VAR_API_KEY{{ "}}" }}
         - Prowlarr:
             icon: prowlarr.png
-            href: http://100.67.54.105:30005
+            href: http://{{ .Values.tailscaleIP }}:30005
             description: Indexer Management
             widget:
               type: prowlarr
@@ -47,7 +47,7 @@ data:
     - Media:
         - Jellyfin:
             icon: jellyfin.png
-            href: http://100.67.54.105:30007
+            href: http://{{ .Values.tailscaleIP }}:30007
             description: Media Server
             widget:
               type: jellyfin
@@ -55,7 +55,7 @@ data:
               key: 2727b02a3f414e0b95b9401cbaaa5c02
         - Sonarr:
             icon: sonarr.png
-            href: http://100.67.54.105:30002
+            href: http://{{ .Values.tailscaleIP }}:30002
             description: TV Series
             widget:
               type: sonarr
@@ -63,7 +63,7 @@ data:
               key: {{ "{{" }}HOMEPAGE_VAR_API_KEY{{ "}}" }}
         - Radarr:
             icon: radarr.png
-            href: http://100.67.54.105:30003
+            href: http://{{ .Values.tailscaleIP }}:30003
             description: Movies
             widget:
               type: radarr
@@ -71,7 +71,7 @@ data:
               key: {{ "{{" }}HOMEPAGE_VAR_API_KEY{{ "}}" }}
         - Bazarr:
             icon: bazarr.png
-            href: http://100.67.54.105:30006
+            href: http://{{ .Values.tailscaleIP }}:30006
             description: Subtitles
             widget:
               type: bazarr
@@ -81,7 +81,7 @@ data:
     - Download:
         - Transmission:
             icon: transmission.png
-            href: http://100.67.54.105:30004
+            href: http://{{ .Values.tailscaleIP }}:30004
             description: Torrent Client
             widget:
               type: transmission
@@ -90,7 +90,7 @@ data:
               password: {{ "{{" }}HOMEPAGE_VAR_TR_PASS{{ "}}" }}
         - ARM:
             icon: https://raw.githubusercontent.com/automatic-ripping-machine/automatic-ripping-machine/main/arm/static/img/arm-logo.png
-            href: http://100.67.54.105:30008
+            href: http://{{ .Values.tailscaleIP }}:30008
             description: Automatic Ripping Machine
 
   bookmarks.yaml: |
