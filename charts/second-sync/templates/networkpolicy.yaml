@@ -1,0 +1,16 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: second-sync-allow-all
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values:
+          - arr-stack
+          - jellyfin
+  ingress:
+  - {} # Allow all ingress
+  policyTypes:
+  - Ingress
