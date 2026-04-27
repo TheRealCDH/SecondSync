@@ -67,6 +67,11 @@ spec:
 
       - name: sonarr
         image: {{ .Values.images.sonarr }}
+        env:
+        - name: PUID
+          value: "1000"
+        - name: PGID
+          value: "1000"
         volumeMounts:
         - name: config-sonarr
           mountPath: /config
@@ -77,6 +82,11 @@ spec:
 
       - name: radarr
         image: {{ .Values.images.radarr }}
+        env:
+        - name: PUID
+          value: "1000"
+        - name: PGID
+          value: "1000"
         volumeMounts:
         - name: config-radarr
           mountPath: /config
@@ -87,20 +97,37 @@ spec:
 
       - name: prowlarr
         image: {{ .Values.images.prowlarr }}
+        env:
+        - name: PUID
+          value: "1000"
+        - name: PGID
+          value: "1000"
         volumeMounts:
         - name: config-prowlarr
           mountPath: /config
 
       - name: bazarr
         image: {{ .Values.images.bazarr }}
+        env:
+        - name: PUID
+          value: "1000"
+        - name: PGID
+          value: "1000"
         volumeMounts:
         - name: config-bazarr
           mountPath: /config
         - name: media
           mountPath: /media
+        - name: media
+          mountPath: /downloads
 
       - name: overseerr
         image: {{ .Values.images.overseerr }}
+        env:
+        - name: PUID
+          value: "1000"
+        - name: PGID
+          value: "1000"
         volumeMounts:
         - name: config-overseerr
           mountPath: /app/config
