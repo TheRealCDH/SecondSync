@@ -2,6 +2,7 @@
 nodeName: ripnix
 storageClass: local-path
 mediaHostPath: /MASS/Plex
+tailscaleIP: "100.67.54.105"
 
 # VPN Settings (Mullvad)
 vpn:
