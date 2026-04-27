@@ -17,6 +17,7 @@ ports:
   prowlarr: 30005
   bazarr: 30006
   jellyfin: 30007
+  arm: 30008
   transmissionPeer: 31413
 
 # Image Tags
@@ -31,3 +32,4 @@ images:
   jellyfin: jellyfin/jellyfin:latest
   flaresolverr: ghcr.io/flaresolverr/flaresolverr:latest
   flaresolverrProxy: diegotreitos/flaresolverr-proxy:latest
+  arm: automaticrippingmachine/automatic-ripping-machine:latest
