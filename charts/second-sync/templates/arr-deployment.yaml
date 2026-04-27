@@ -215,6 +215,25 @@ spec:
         - name: TZ
           value: UTC
 
+      - name: homepage
+        image: {{ .Values.images.homepage }}
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            export HOMEPAGE_VAR_API_KEY=$(cat /run/shared/api_key)
+            export HOMEPAGE_VAR_TR_USER={{ .Values.transmission.username | quote }}
+            export HOMEPAGE_VAR_TR_PASS={{ .Values.transmission.password | quote }}
+            exec /usr/local/bin/node server.js
+        volumeMounts:
+        - name: shared-keys
+          mountPath: /run/shared
+          readOnly: true
+        - name: homepage-config
+          mountPath: /app/config
+        - name: config-homepage
+          mountPath: /app/config/logs
+          subPath: logs
+
       # --- AUTO-LINKER SIDE CAR ---
       - name: arr-linker
         image: python:3.11-alpine
@@ -269,3 +288,9 @@ spec:
       - name: config-overseerr
         persistentVolumeClaim:
           claimName: overseerr-config-pvc
+      - name: config-homepage
+        persistentVolumeClaim:
+          claimName: homepage-config-pvc
+      - name: homepage-config
+        configMap:
+          name: homepage-config

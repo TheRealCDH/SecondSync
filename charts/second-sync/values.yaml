@@ -19,6 +19,7 @@ ports:
   jellyfin: 30007
   arm: 30008
   transmissionPeer: 31413
+  homepage: 30000
 
 # Transmission Credentials
 transmission:
@@ -38,3 +39,4 @@ images:
   flaresolverr: ghcr.io/flaresolverr/flaresolverr:latest
   flaresolverrProxy: diegotreitos/flaresolverr-proxy:latest
   arm: automaticrippingmachine/automatic-ripping-machine:latest
+  homepage: ghcr.io/gethomepage/homepage:latest
