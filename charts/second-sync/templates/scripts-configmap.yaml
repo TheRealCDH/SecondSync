@@ -143,7 +143,9 @@ data:
           .jellyfin.hostname = "jellyfin" |
           .jellyfin.apiKey = $jkey |
           .jellyfin.name = "Main" |
-          (.jellyfin.libraries[] | select(.id != null) | .enabled) = true
+          .jellyfin.serverId = "26da23e0782d488382b90388c48397bd" |
+          (.jellyfin.libraries[] | select(.id != null) | .enabled) = true |
+          .public.initialized = true
         ' "$FILE" > "$TMP" && mv "$TMP" "$FILE"
         
         # Link Radarr to Jellyseerr via API
