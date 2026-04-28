@@ -137,9 +137,12 @@ data:
         echo "Ensuring Jellyseerr settings are correct..."
         TMP=$(mktemp)
         # Force API key and enable all Jellyfin libraries
-        jq --arg key "$API_KEY" '
+        jq --arg key "$API_KEY" --arg jkey "2727b02a3f414e0b95b9401cbaaa5c02" '
           .main.apiKey = $key |
           .jellyfin.ip = "jellyfin" |
+          .jellyfin.hostname = "jellyfin" |
+          .jellyfin.apiKey = $jkey |
+          .jellyfin.name = "Main" |
           (.jellyfin.libraries[] | select(.id != null) | .enabled) = true
         ' "$FILE" > "$TMP" && mv "$TMP" "$FILE"
         
