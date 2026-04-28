@@ -5,7 +5,7 @@ metadata:
 data:
   proxy.py: |
     import http.server, socketserver, requests, json, time
-    FLARESOLVERR_URL = "http://127.0.0.1:8191/v1"
+    FLARESOLVERR_URL = "http://localhost:8191/v1"
     PORT = 8118
     class FlareProxy(http.server.BaseHTTPRequestHandler):
         def do_GET(self): self.handle_request("get")
@@ -71,9 +71,11 @@ data:
       EXISTING=$(curl -s "http://127.0.0.1:9696/api/v1/applications?apikey=$API_KEY" | jq -c ".[] | select(.name == \"$NAME\")")
       if [ ! -z "$EXISTING" ]; then
         ID=$(echo $EXISTING | jq -r .id)
+        echo "Updating existing $NAME (ID: $ID)..."
         UPDATED=$(echo $EXISTING | jq -c ".syncLevel = \"fullSync\" | .fields = [{\"name\": \"baseUrl\", \"value\": \"http://127.0.0.1:$PORT\"}, {\"name\": \"apiKey\", \"value\": \"$API_KEY\"}]")
         curl -s -X PUT "http://127.0.0.1:9696/api/v1/applications/$ID?apikey=$API_KEY" -H "Content-Type: application/json" -d "$UPDATED" > /dev/null
       else
+        echo "Adding new $NAME..."
         curl -s -X POST "http://127.0.0.1:9696/api/v1/applications?apikey=$API_KEY" -H "Content-Type: application/json" \
           -d "{\"name\": \"$NAME\", \"enabled\": true, \"syncLevel\": \"fullSync\", \"configContract\": \"$CONTRACT\", \"implementation\": \"$NAME\", \"fields\": [{\"name\": \"baseUrl\", \"value\": \"http://127.0.0.1:$PORT\"}, {\"name\": \"apiKey\", \"value\": \"$API_KEY\"}]}" > /dev/null
       fi
@@ -84,35 +86,42 @@ data:
       EXISTING=$(curl -s "http://127.0.0.1:$PORT/api/v3/downloadclient?apikey=$API_KEY" | jq -c ".[] | select(.name == \"Transmission\")")
       if [ ! -z "$EXISTING" ]; then
         ID=$(echo $EXISTING | jq -r .id)
+        echo "Updating Transmission in app on port $PORT..."
         UPDATED=$(echo $EXISTING | jq -c ".fields = [{\"name\": \"host\", \"value\": \"127.0.0.1\"}, {\"name\": \"port\", \"value\": 9091}, {\"name\": \"username\", \"value\": \"$USER\"}, {\"name\": \"password\", \"value\": \"$PASSWORD\"}]")
         curl -s -X PUT "http://127.0.0.1:$PORT/api/v3/downloadclient/$ID?apikey=$API_KEY" -H "Content-Type: application/json" -d "$UPDATED" > /dev/null
       else
+        echo "Adding Transmission to app on port $PORT..."
         curl -s -X POST "http://127.0.0.1:$PORT/api/v3/downloadclient?apikey=$API_KEY" -H "Content-Type: application/json" \
           -d "{\"name\": \"Transmission\", \"enable\": true, \"priority\": 1, \"implementation\": \"Transmission\", \"configContract\": \"TransmissionSettings\", \"fields\": [{\"name\": \"host\", \"value\": \"127.0.0.1\"}, {\"name\": \"port\", \"value\": 9091}, {\"name\": \"username\", \"value\": \"$USER\"}, {\"name\": \"password\", \"value\": \"$PASSWORD\"}]}" > /dev/null
       fi
     done
 
     # 3. Add Root Folders
-    if ! curl -s "http://127.0.0.1:7878/api/v3/rootfolder?apikey=$API_KEY" | jq -e ".[]" > /dev/null; then
-      curl -s -X POST "http://127.0.0.1:7878/api/v3/rootfolder?apikey=$API_KEY" -H "Content-Type: application/json" -d "{\"path\": \"/downloads/Movies\"}"
+    if ! curl -s "http://127.0.0.1:7878/api/v3/rootfolder?apikey=$API_KEY" | jq -e ".[] | select(.path == \"/downloads\")" > /dev/null; then
+      echo "Adding Radarr Root Folder /downloads..."
+      curl -s -X POST "http://127.0.0.1:7878/api/v3/rootfolder?apikey=$API_KEY" -H "Content-Type: application/json" -d "{\"path\": \"/downloads\"}"
     fi
-    if ! curl -s "http://127.0.0.1:8989/api/v3/rootfolder?apikey=$API_KEY" | jq -e ".[]" > /dev/null; then
-      curl -s -X POST "http://127.0.0.1:8989/api/v3/rootfolder?apikey=$API_KEY" -H "Content-Type: application/json" -d "{\"path\": \"/downloads/TV Shows\"}"
+    if ! curl -s "http://127.0.0.1:8989/api/v3/rootfolder?apikey=$API_KEY" | jq -e ".[] | select(.path == \"/downloads\")" > /dev/null; then
+      echo "Adding Sonarr Root Folder /downloads..."
+      curl -s -X POST "http://127.0.0.1:8989/api/v3/rootfolder?apikey=$API_KEY" -H "Content-Type: application/json" -d "{\"path\": \"/downloads\"}"
     fi
 
     # 4. Prowlarr -> FlareSolverr
     EXISTING_FS=$(curl -s "http://127.0.0.1:9696/api/v1/indexerproxy?apikey=$API_KEY" | jq -c ".[] | select(.name == \"FlareSolverr\")")
     if [ ! -z "$EXISTING_FS" ]; then
       ID=$(echo $EXISTING_FS | jq -r .id)
+      echo "Updating FlareSolverr proxy..."
       UPDATED=$(echo $EXISTING_FS | jq -c ".fields = [{\"name\": \"host\", \"value\": \"http://127.0.0.1:8191\"}, {\"name\": \"requestTimeout\", \"value\": 60}]")
       curl -s -X PUT "http://127.0.0.1:9696/api/v1/indexerproxy/$ID?apikey=$API_KEY" -H "Content-Type: application/json" -d "$UPDATED" > /dev/null
     else
+      echo "Adding FlareSolverr API to Prowlarr..."
       curl -s -X POST "http://127.0.0.1:9696/api/v1/indexerproxy?apikey=$API_KEY" -H "Content-Type: application/json" \
         -d "{\"name\": \"FlareSolverr\", \"enabled\": true, \"implementation\": \"FlareSolverr\", \"configContract\": \"FlareSolverrSettings\", \"fields\": [{\"name\": \"host\", \"value\": \"http://127.0.0.1:8191\"}, {\"name\": \"requestTimeout\", \"value\": 60}]}" > /dev/null
     fi
 
     # 5. Global HTTP Proxy
     if ! curl -s "http://127.0.0.1:9696/api/v1/indexerproxy?apikey=$API_KEY" | jq -e ".[] | select(.name == \"FlareSolverr-Global\")" > /dev/null; then
+      echo "Adding FlareSolverr-Global HTTP Proxy..."
       curl -s -X POST "http://127.0.0.1:9696/api/v1/indexerproxy?apikey=$API_KEY" -H "Content-Type: application/json" \
         -d "{\"name\": \"FlareSolverr-Global\", \"enabled\": true, \"implementation\": \"Http\", \"configContract\": \"HttpSettings\", \"fields\": [{\"name\": \"host\", \"value\": \"127.0.0.1\"}, {\"name\": \"port\", \"value\": 8118}]}"
     fi
@@ -121,16 +130,12 @@ data:
     while true; do
       echo "--- Loop iteration $(date) ---"
       
-      # 1. Patch Jellyseerr Configuration File
+      # Patch Jellyseerr Configuration File
       FILE="/jellyseerr/settings.json"
-      # If file is empty or missing, create basic structure to avoid migration errors
-      if [ ! -s "$FILE" ]; then
-        echo '{"main":{"mediaServerType":2},"jellyfin":{"libraries":[]}}' > "$FILE"
-      fi
-
-      if jq -e ".main" "$FILE" > /dev/null; then
+      if [ -f "$FILE" ] && jq -e ".main" "$FILE" > /dev/null; then
         echo "Ensuring Jellyseerr settings are correct..."
         TMP=$(mktemp)
+        # Force API key and enable all Jellyfin libraries
         jq --arg key "$API_KEY" --arg jkey "2727b02a3f414e0b95b9401cbaaa5c02" '
           .main.apiKey = $key |
           .main.mediaServerType = 2 |
@@ -144,16 +149,14 @@ data:
           (.jellyfin.libraries[] | select(.id != null) | .enabled) = true
         ' "$FILE" > "$TMP" && mv "$TMP" "$FILE"
         
-        # We only force initialized=false if there are no users in DB
-        # This part requires DB access, skip for now or use API
-        
-        # Link Radarr to Jellyseerr
+        # Link Radarr to Jellyseerr via API
         R_PROFILE_ID=$(curl -s "http://127.0.0.1:7878/api/v3/qualityprofile?apikey=$API_KEY" | jq -r ".[] | select(.name == \"Any\") | .id")
         if [ -z "$R_PROFILE_ID" ] || [ "$R_PROFILE_ID" == "null" ]; then R_PROFILE_ID=1; fi
         
         if ! curl -s -X GET "http://127.0.0.1:5055/api/v1/settings/radarr" -H "X-Api-Key: $API_KEY" | jq -e ".[]" > /dev/null; then
+          echo "Linking Radarr to Jellyseerr..."
           curl -s -X POST "http://127.0.0.1:5055/api/v1/settings/radarr" -H "X-Api-Key: $API_KEY" -H "Content-Type: application/json" \
-            -d "{\"name\": \"Radarr\", \"hostname\": \"127.0.0.1\", \"port\": 7878, \"apiKey\": \"$API_KEY\", \"useSsl\": false, \"baseUrl\": \"\", \"activeProfileId\": $R_PROFILE_ID, \"activeProfileName\": \"Any\", \"activeDirectory\": \"/downloads/Movies\", \"isDefault\": true, \"syncLevel\": 1, \"is4k\": false, \"minimumAvailability\": \"announced\"}"
+            -d "{\"name\": \"Radarr\", \"hostname\": \"127.0.0.1\", \"port\": 7878, \"apiKey\": \"$API_KEY\", \"useSsl\": false, \"baseUrl\": \"\", \"activeProfileId\": $R_PROFILE_ID, \"activeProfileName\": \"Any\", \"activeDirectory\": \"/downloads\", \"isDefault\": true, \"syncLevel\": 1, \"is4k\": false, \"minimumAvailability\": \"announced\"}"
         fi
 
         # Link Sonarr to Jellyseerr
@@ -161,8 +164,9 @@ data:
         if [ -z "$S_PROFILE_ID" ] || [ "$S_PROFILE_ID" == "null" ]; then S_PROFILE_ID=1; fi
 
         if ! curl -s -X GET "http://127.0.0.1:5055/api/v1/settings/sonarr" -H "X-Api-Key: $API_KEY" | jq -e ".[]" > /dev/null; then
+          echo "Linking Sonarr to Jellyseerr..."
           curl -s -X POST "http://127.0.0.1:5055/api/v1/settings/sonarr" -H "X-Api-Key: $API_KEY" -H "Content-Type: application/json" \
-            -d "{\"name\": \"Sonarr\", \"hostname\": \"127.0.0.1\", \"port\": 8989, \"apiKey\": \"$API_KEY\", \"useSsl\": false, \"baseUrl\": \"\", \"activeProfileId\": $S_PROFILE_ID, \"activeProfileName\": \"Any\", \"activeDirectory\": \"/downloads/TV Shows\", \"isDefault\": true, \"syncLevel\": 1, \"is4k\": false, \"enableSeasonFolders\": true}"
+            -d "{\"name\": \"Sonarr\", \"hostname\": \"127.0.0.1\", \"port\": 8989, \"apiKey\": \"$API_KEY\", \"useSsl\": false, \"baseUrl\": \"\", \"activeProfileId\": $S_PROFILE_ID, \"activeProfileName\": \"Any\", \"activeDirectory\": \"/downloads\", \"isDefault\": true, \"syncLevel\": 1, \"is4k\": false, \"enableSeasonFolders\": true}"
         fi
       fi
 
@@ -174,6 +178,7 @@ data:
           CURRENT_CONF=$(curl -s -H "X-Emby-Token: $J_TOKEN" "http://100.67.54.105:30007/Users/$USER_ID/Configuration")
           if [ ! -z "$CURRENT_CONF" ] && [ "$CURRENT_CONF" != "null" ]; then
             if [ "$(echo "$CURRENT_CONF" | jq -r '.AudioLanguagePreference')" != "eng" ] || [ "$(echo "$CURRENT_CONF" | jq -r '.SubtitleLanguagePreference')" != "eng" ] || [ "$(echo "$CURRENT_CONF" | jq -r '.SubtitleMode')" != "NoSubtitles" ]; then
+              echo "Setting English/NoSubtitles defaults for Jellyfin user $USER_ID..."
               UPDATED_CONF=$(echo "$CURRENT_CONF" | jq '.AudioLanguagePreference = "eng" | .SubtitleLanguagePreference = "eng" | .SubtitleMode = "NoSubtitles"')
               curl -s -X POST -H "X-Emby-Token: $J_TOKEN" -H "Content-Type: application/json" \
                 "http://100.67.54.105:30007/Users/$USER_ID/Configuration" -d "$UPDATED_CONF" > /dev/null
@@ -223,7 +228,7 @@ data:
       fi
       
       # 5. Trigger a sync in Prowlarr
-      curl -s -X POST "http://127.0.0.1:9696/api/v1/command?apikey=$API_KEY" -H "Content-Type: application/json" -d '{"name": "ApplicationIndexerSync"}' > /dev/null
+      curl -s -X POST "http://127.0.0.1:9696/api/v1/command?apikey=$API_KEY" -H "Content-Type: application/json" d '{"name": "ApplicationIndexerSync"}' > /dev/null
 
       sleep 300
     done
