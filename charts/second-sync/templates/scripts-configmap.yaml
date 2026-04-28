@@ -83,6 +83,7 @@ data:
 
     # 2. Radarr/Sonarr -> Transmission
     for PORT in 7878 8989; do
+      echo "Ensuring Transmission is linked in app on port $PORT..."
       EXISTING=$(curl -s "http://127.0.0.1:$PORT/api/v3/downloadclient?apikey=$API_KEY" | jq -c ".[] | select(.name == \"Transmission\")")
       if [ ! -z "$EXISTING" ]; then
         ID=$(echo $EXISTING | jq -r .id)
@@ -96,15 +97,13 @@ data:
       fi
     done
 
-    # 3. Add Root Folders
-    if ! curl -s "http://127.0.0.1:7878/api/v3/rootfolder?apikey=$API_KEY" | jq -e ".[] | select(.path == \"/downloads\")" > /dev/null; then
-      echo "Adding Radarr Root Folder /downloads..."
-      curl -s -X POST "http://127.0.0.1:7878/api/v3/rootfolder?apikey=$API_KEY" -H "Content-Type: application/json" -d "{\"path\": \"/downloads\"}"
-    fi
-    if ! curl -s "http://127.0.0.1:8989/api/v3/rootfolder?apikey=$API_KEY" | jq -e ".[] | select(.path == \"/downloads\")" > /dev/null; then
-      echo "Adding Sonarr Root Folder /downloads..."
-      curl -s -X POST "http://127.0.0.1:8989/api/v3/rootfolder?apikey=$API_KEY" -H "Content-Type: application/json" -d "{\"path\": \"/downloads\"}"
-    fi
+    # 3. Add Root Folder /downloads
+    for PORT in 7878 8989; do
+      if ! curl -s "http://127.0.0.1:$PORT/api/v3/rootfolder?apikey=$API_KEY" | jq -e ".[] | select(.path == \"/downloads\")" > /dev/null; then
+        echo "Adding Root Folder /downloads to app on port $PORT..."
+        curl -s -X POST "http://127.0.0.1:$PORT/api/v3/rootfolder?apikey=$API_KEY" -H "Content-Type: application/json" -d "{\"path\": \"/downloads\"}"
+      fi
+    done
 
     # 4. Prowlarr -> FlareSolverr
     EXISTING_FS=$(curl -s "http://127.0.0.1:9696/api/v1/indexerproxy?apikey=$API_KEY" | jq -c ".[] | select(.name == \"FlareSolverr\")")
@@ -132,10 +131,13 @@ data:
       
       # Patch Jellyseerr Configuration File
       FILE="/jellyseerr/settings.json"
-      if [ -f "$FILE" ] && jq -e ".main" "$FILE" > /dev/null; then
+      if [ ! -s "$FILE" ]; then
+        echo '{"main":{"mediaServerType":2},"jellyfin":{"libraries":[]}}' > "$FILE"
+      fi
+
+      if jq -e ".main" "$FILE" > /dev/null 2>&1; then
         echo "Ensuring Jellyseerr settings are correct..."
         TMP=$(mktemp)
-        # Force API key and enable all Jellyfin libraries
         jq --arg key "$API_KEY" --arg jkey "2727b02a3f414e0b95b9401cbaaa5c02" '
           .main.apiKey = $key |
           .main.mediaServerType = 2 |
@@ -153,7 +155,7 @@ data:
         R_PROFILE_ID=$(curl -s "http://127.0.0.1:7878/api/v3/qualityprofile?apikey=$API_KEY" | jq -r ".[] | select(.name == \"Any\") | .id")
         if [ -z "$R_PROFILE_ID" ] || [ "$R_PROFILE_ID" == "null" ]; then R_PROFILE_ID=1; fi
         
-        if ! curl -s -X GET "http://127.0.0.1:5055/api/v1/settings/radarr" -H "X-Api-Key: $API_KEY" | jq -e ".[]" > /dev/null; then
+        if ! curl -s -X GET "http://127.0.0.1:5055/api/v1/settings/radarr" -H "X-Api-Key: $API_KEY" | jq -e ".[]" > /dev/null 2>&1; then
           echo "Linking Radarr to Jellyseerr..."
           curl -s -X POST "http://127.0.0.1:5055/api/v1/settings/radarr" -H "X-Api-Key: $API_KEY" -H "Content-Type: application/json" \
             -d "{\"name\": \"Radarr\", \"hostname\": \"127.0.0.1\", \"port\": 7878, \"apiKey\": \"$API_KEY\", \"useSsl\": false, \"baseUrl\": \"\", \"activeProfileId\": $R_PROFILE_ID, \"activeProfileName\": \"Any\", \"activeDirectory\": \"/downloads\", \"isDefault\": true, \"syncLevel\": 1, \"is4k\": false, \"minimumAvailability\": \"announced\"}"
@@ -163,7 +165,7 @@ data:
         S_PROFILE_ID=$(curl -s "http://127.0.0.1:8989/api/v3/qualityprofile?apikey=$API_KEY" | jq -r ".[] | select(.name == \"Any\") | .id")
         if [ -z "$S_PROFILE_ID" ] || [ "$S_PROFILE_ID" == "null" ]; then S_PROFILE_ID=1; fi
 
-        if ! curl -s -X GET "http://127.0.0.1:5055/api/v1/settings/sonarr" -H "X-Api-Key: $API_KEY" | jq -e ".[]" > /dev/null; then
+        if ! curl -s -X GET "http://127.0.0.1:5055/api/v1/settings/sonarr" -H "X-Api-Key: $API_KEY" | jq -e ".[]" > /dev/null 2>&1; then
           echo "Linking Sonarr to Jellyseerr..."
           curl -s -X POST "http://127.0.0.1:5055/api/v1/settings/sonarr" -H "X-Api-Key: $API_KEY" -H "Content-Type: application/json" \
             -d "{\"name\": \"Sonarr\", \"hostname\": \"127.0.0.1\", \"port\": 8989, \"apiKey\": \"$API_KEY\", \"useSsl\": false, \"baseUrl\": \"\", \"activeProfileId\": $S_PROFILE_ID, \"activeProfileName\": \"Any\", \"activeDirectory\": \"/downloads\", \"isDefault\": true, \"syncLevel\": 1, \"is4k\": false, \"enableSeasonFolders\": true}"
@@ -228,7 +230,7 @@ data:
       fi
       
       # 5. Trigger a sync in Prowlarr
-      curl -s -X POST "http://127.0.0.1:9696/api/v1/command?apikey=$API_KEY" -H "Content-Type: application/json" d '{"name": "ApplicationIndexerSync"}' > /dev/null
+      curl -s -X POST "http://127.0.0.1:9696/api/v1/command?apikey=$API_KEY" -H "Content-Type: application/json" -d '{"name": "ApplicationIndexerSync"}' > /dev/null
 
       sleep 300
     done
