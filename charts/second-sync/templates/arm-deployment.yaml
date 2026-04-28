@@ -1,1 +1,180 @@
-# Moved to arr-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: arm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: arm
+  template:
+    metadata:
+      labels:
+        app: arm
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: {{ .Values.nodeName }}
+      shareProcessNamespace: true
+      initContainers:
+      - name: arm-permissions
+        image: alpine
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            echo "Fixing ARM config permissions..."
+            mkdir -p /home/arm /etc/arm/config /home/arm/.MakeMKV
+            chown -R 1000:1000 /home/arm /etc/arm/config /home/arm/.MakeMKV
+            
+            # Enable MakeMKV auto-download of keys
+            FILE="/home/arm/.MakeMKV/settings.conf"
+            # Current known beta key
+            BETA_KEY="T-sJ5R5BKxhD671U9s0teXbyP19MhCkkkB7rmnNbb1aEHaqveiVqyI3RXGMHDXhoyNUC"
+            if [ ! -f "$FILE" ]; then
+              echo "app_EnableAutoKey=\"1\"" > "$FILE"
+              echo "app_Key = \"$BETA_KEY\"" >> "$FILE"
+              chown 1000:1000 "$FILE"
+            else
+              # Ensure AutoKey is enabled
+              if ! grep -q "app_EnableAutoKey" "$FILE"; then
+                echo 'app_EnableAutoKey="1"' >> "$FILE"
+              fi
+              # Ensure key is set
+              if ! grep -q "app_Key" "$FILE"; then
+                echo "app_Key = \"$BETA_KEY\"" >> "$FILE"
+              fi
+            fi
+        volumeMounts:
+        - name: config-arm
+          mountPath: /home/arm
+          subPath: home
+        - name: config-arm
+          mountPath: /etc/arm/config
+          subPath: config
+      containers:
+      - name: arm
+        image: {{ .Values.images.arm }}
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            # Apply permanent patch for main.py
+            sed -i 's/job_length.seconds/getattr(job_length, "seconds", 0)/g' /opt/arm/arm/ripper/main.py
+            sed -i 's/job_length.days/getattr(job_length, "days", 0)/g' /opt/arm/arm/ripper/main.py
+            # Start the original entrypoint
+            exec /sbin/my_init
+        securityContext:
+          privileged: true
+        env:
+        - name: ARM_UID
+          value: "1000"
+        - name: ARM_GID
+          value: "1000"
+        - name: DISABLE_LOGIN
+          value: "true"
+        - name: HTTP_PROXY
+          value: "http://localhost:8118"
+        - name: HTTPS_PROXY
+          value: "http://localhost:8118"
+        volumeMounts:
+        - name: config-arm
+          mountPath: /home/arm
+          subPath: home
+        - name: config-arm
+          mountPath: /etc/arm/config
+          subPath: config
+        - name: media
+          mountPath: /home/arm/media
+        - name: dev
+          mountPath: /dev
+        - name: sys
+          mountPath: /sys
+          readOnly: true
+
+      - name: arm-listener
+        image: {{ .Values.images.arm }}
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            echo "Starting ARM Insertion Listener..."
+            # Apply permanent patch for main.py (AttributeError fix)
+            sed -i 's/job_length.seconds/getattr(job_length, "seconds", 0)/g' /opt/arm/arm/ripper/main.py
+            sed -i 's/job_length.days/getattr(job_length, "days", 0)/g' /opt/arm/arm/ripper/main.py
+            
+            # Fix git safe directory issue
+            git config --global --add safe.directory /opt/arm
+            LAST_DISC=""
+            while true; do
+              if [ -b /dev/sr0 ]; then
+                # Check for disc presence using blkid
+                DISC_ID=$(blkid -o value -s UUID /dev/sr0 || blkid -o value -s LABEL /dev/sr0 || echo "")
+                
+                if [ ! -z "$DISC_ID" ]; then
+                  if [ "$DISC_ID" != "$LAST_DISC" ]; then
+                    echo "New disc detected (ID: $DISC_ID)! Triggering ARM..."
+                    LAST_DISC="$DISC_ID"
+                    # Trigger ARM
+                    su - arm -c "git config --global --add safe.directory /opt/arm && python3 /opt/arm/arm/ripper/main.py -d sr0" &
+                  fi
+                else
+                  if [ "$LAST_DISC" != "" ]; then
+                    echo "Disc removed."
+                    LAST_DISC=""
+                  fi
+                fi
+              fi
+              sleep 10
+            done
+        securityContext:
+          privileged: true
+        env:
+        - name: ARM_UID
+          value: "1000"
+        - name: ARM_GID
+          value: "1000"
+        - name: HTTP_PROXY
+          value: "http://localhost:8118"
+        - name: HTTPS_PROXY
+          value: "http://localhost:8118"
+        volumeMounts:
+        - name: dev
+          mountPath: /dev
+        - name: sys
+          mountPath: /sys
+          readOnly: true
+        - name: config-arm
+          mountPath: /home/arm
+          subPath: home
+        - name: config-arm
+          mountPath: /etc/arm/config
+          subPath: config
+        - name: media
+          mountPath: /home/arm/media
+
+      - name: flaresolverr
+        image: {{ .Values.images.flaresolverr }}
+        env:
+        - name: LOG_LEVEL
+          value: info
+        - name: TZ
+          value: UTC
+
+      - name: flaresolverr-proxy
+        image: {{ .Values.images.flaresolverrProxy }}
+        env:
+        - name: FLARESOLVERR_URL
+          value: "http://localhost:8191"
+        - name: PORT
+          value: "8118"
+
+      volumes:
+      - name: media
+        persistentVolumeClaim:
+          claimName: second-sync-media-pvc
+      - name: config-arm
+        persistentVolumeClaim:
+          claimName: arm-config-pvc
+      - name: dev
+        hostPath:
+          path: /dev
+      - name: sys
+        hostPath:
+          path: /sys
