@@ -40,6 +40,6 @@ images:
   overseerr: fallenbagel/jellyseerr:latest
   jellyfin: jellyfin/jellyfin:latest
   flaresolverr: ghcr.io/flaresolverr/flaresolverr:latest
-  flaresolverrProxy: diegotreitos/flaresolverr-proxy:latest
+  flaresolverrProxy: ghcr.io/2173/flaresolverr-proxy:latest
   arm: automaticrippingmachine/automatic-ripping-machine:latest
   homepage: ghcr.io/gethomepage/homepage:latest
