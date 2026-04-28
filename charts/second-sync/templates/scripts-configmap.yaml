@@ -141,6 +141,8 @@ data:
           .main.apiKey = $key |
           .jellyfin.ip = "jellyfin" |
           .jellyfin.hostname = "jellyfin" |
+          .jellyfin.port = 8096 |
+          .jellyfin.useSsl = false |
           .jellyfin.apiKey = $jkey |
           .jellyfin.name = "Main" |
           .jellyfin.serverId = "26da23e0782d488382b90388c48397bd" |
