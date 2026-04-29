@@ -187,7 +187,6 @@ spec:
 
       - name: overseerr
         image: {{ .Values.images.overseerr }}
-        command: ["/bin/sh", "/run/scripts/overseerr-patch.sh"]
         env:
         - name: PUID
           value: "1000"
@@ -196,9 +195,12 @@ spec:
         volumeMounts:
         - name: config-overseerr
           mountPath: /app/config
-        - name: arr-scripts
-          mountPath: /run/scripts
-          readOnly: true
+        - name: overseerr-auth-patch
+          mountPath: /app/dist/middleware/auth.js
+          subPath: auth-middleware.js
+        - name: overseerr-auth-patch
+          mountPath: /app/dist/routes/auth.js
+          subPath: auth-routes.js
 
       - name: flaresolverr
         image: {{ .Values.images.flaresolverr }}
@@ -259,6 +261,9 @@ spec:
       - name: arr-scripts
         configMap:
           name: arr-scripts
+      - name: overseerr-auth-patch
+        configMap:
+          name: overseerr-auth-patch
       - name: vpn-key
         hostPath:
           path: /root/mull.key

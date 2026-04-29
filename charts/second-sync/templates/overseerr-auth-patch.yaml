@@ -4,38 +4,63 @@ metadata:
   name: overseerr-auth-patch
   namespace: flux-system
 data:
-  auth.js: |
+  auth-middleware.js: |
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.isAuthenticated = exports.checkUser = void 0;
     const datasource_1 = require("../datasource");
     const User_1 = require("../entity/User");
-    const settings_1 = require("../lib/settings");
     const checkUser = async (req, _res, next) => {
-        const userRepository = (0, datasource_1.getRepository)(User_1.User);
-        // Force User ID 1 (Admin) for every single request
-        let user = await userRepository.findOne({ where: { id: 1 } });
-        if (user) {
-            req.user = user;
-            // Inject session if missing to fool the frontend
-            if (req.session) {
-                req.session.userId = 1;
+        try {
+            const userRepository = (0, datasource_1.getRepository)(User_1.User);
+            let user = await userRepository.findOne({ where: { id: 1 } });
+            if (user) {
+                req.user = user;
+                if (req.session) { req.session.userId = 1; }
             }
+        } catch (e) {
+            console.error("Auth bypass error:", e);
         }
-        req.locale = user?.settings?.locale ? user.settings.locale : "en";
+        req.locale = "en";
         next();
     };
     exports.checkUser = checkUser;
     const isAuthenticated = (permissions, options) => {
-        const authMiddleware = (req, res, next) => {
-            // If checkUser forced a user, we are always "authenticated"
-            if (!req.user) {
-                 // Fallback just in case DB is not ready
-                 next();
-                 return;
-            }
-            next();
-        };
-        return authMiddleware;
+        return (req, res, next) => { next(); };
     };
     exports.isAuthenticated = isAuthenticated;
+
+  auth-routes.js: |
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    const express_1 = require("express");
+    const datasource_1 = require("../datasource");
+    const User_1 = require("../entity/User");
+    const authRoutes = (0, express_1.Router)();
+    
+    // Always return Admin user for /me
+    authRoutes.get('/me', async (req, res) => {
+        const userRepository = (0, datasource_1.getRepository)(User_1.User);
+        const user = await userRepository.findOne({ where: { id: 1 } });
+        if (req.session) req.session.userId = 1;
+        return res.status(200).json(user);
+    });
+
+    // Always succeed login for /jellyfin and /local
+    const autoLogin = async (req, res) => {
+        const userRepository = (0, datasource_1.getRepository)(User_1.User);
+        const user = await userRepository.findOne({ where: { id: 1 } });
+        if (req.session) req.session.userId = 1;
+        return res.status(200).json(user.filter());
+    };
+
+    authRoutes.post('/jellyfin', autoLogin);
+    authRoutes.post('/local', autoLogin);
+    authRoutes.post('/plex', autoLogin);
+    
+    authRoutes.post('/logout', (req, res) => {
+        if (req.session) req.session.destroy();
+        res.status(200).json({ status: 'ok' });
+    });
+
+    exports.default = authRoutes;
