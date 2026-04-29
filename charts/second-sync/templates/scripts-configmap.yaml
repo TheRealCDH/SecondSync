@@ -226,26 +226,61 @@ data:
       # 3. Jellyfin HWAccel Patching
       JELLYFIN_CONF="/jellyfin-config/config/encoding.xml"
       if [ -f "$JELLYFIN_CONF" ]; then
-        if ! grep -q "<EnableHardwareScaling>true</EnableHardwareScaling>" "$JELLYFIN_CONF"; then
-          echo "Patching Jellyfin hardware acceleration..."
-          sed -i "s|<HardwareAccelerationType>.*</HardwareAccelerationType>|<HardwareAccelerationType>nvenc</HardwareAccelerationType>|" "$JELLYFIN_CONF"
-          sed -i "s|<EnableTonemapping>.*</EnableTonemapping>|<EnableTonemapping>true</EnableTonemapping>|" "$JELLYFIN_CONF"
-          sed -i "s|<EnableVppTonemapping>.*</EnableVppTonemapping>|<EnableVppTonemapping>true</EnableVppTonemapping>|" "$JELLYFIN_CONF"
-          sed -i "s|<AllowHevcEncoding>.*</AllowHevcEncoding>|<AllowHevcEncoding>true</AllowHevcEncoding>|" "$JELLYFIN_CONF"
-          sed -i "s|<EnableEnhancedNvdecDecoder>.*</EnableEnhancedNvdecDecoder>|<EnableEnhancedNvdecDecoder>true</EnableEnhancedNvdecDecoder>|" "$JELLYFIN_CONF"
-          if ! grep -q "EnableHardwareScaling" "$JELLYFIN_CONF"; then
-            sed -i "/<\/EncodingOptions>/i \  <EnableHardwareScaling>true</EnableHardwareScaling>" "$JELLYFIN_CONF"
-          else
-            sed -i "s|<EnableHardwareScaling>.*</EnableHardwareScaling>|<EnableHardwareScaling>true</EnableHardwareScaling>|" "$JELLYFIN_CONF"
-          fi
-          
-          # Ensure all Hardware Decoding Codecs are present
-          for CODEC in h264 hevc mpeg2video mpeg4 vc1 vp8 vp9 av1; do
-            if ! grep -q "<string>$CODEC</string>" "$JELLYFIN_CONF"; then
-              sed -i "/<HardwareDecodingCodecs>/a \    <string>$CODEC</string>" "$JELLYFIN_CONF"
-            fi
-          done
-        fi
+        echo "Ensuring Jellyfin hardware acceleration is optimized..."
+        python3 -c '
+import xml.etree.ElementTree as ET
+import os
+
+path = "/jellyfin-config/config/encoding.xml"
+try:
+    tree = ET.parse(path)
+    root = tree.getroot()
+
+    options = {
+        "HardwareAccelerationType": "nvenc",
+        "EnableTonemapping": "true",
+        "EnableVppTonemapping": "true",
+        "AllowHevcEncoding": "true",
+        "EnableHardwareScaling": "true",
+        "EnableEnhancedNvdecDecoder": "true",
+        "PreferSystemNativeHwDecoder": "true",
+        "EnableHardwareEncoding": "true"
+    }
+
+    changed = False
+    for tag, val in options.items():
+        node = root.find(tag)
+        if node is None:
+            node = ET.SubElement(root, tag)
+            node.text = val
+            changed = True
+        elif node.text != val:
+            node.text = val
+            changed = True
+
+    hwd = root.find("HardwareDecodingCodecs")
+    codecs = ["h264", "hevc", "mpeg2video", "mpeg4", "vc1", "vp8", "vp9", "av1"]
+    if hwd is None:
+        hwd = ET.SubElement(root, "HardwareDecodingCodecs")
+        changed = True
+    
+    for c in codecs:
+        found = False
+        for s in hwd.findall("string"):
+            if s.text == c:
+                found = True
+                break
+        if not found:
+            s = ET.SubElement(hwd, "string")
+            s.text = c
+            changed = True
+
+    if changed:
+        print("Settings updated. Writing to file...")
+        tree.write(path, encoding="utf-8", xml_declaration=True)
+except Exception as e:
+    print(f"Error patching Jellyfin: {e}")
+'
       fi
 
       # 4. Bazarr API Key Patching
