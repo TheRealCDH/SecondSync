@@ -224,6 +224,10 @@ spec:
           value: "*"
         - name: SAFE_MODE
           value: "true"
+        - name: HOMEPAGE_VAR_TR_USER
+          value: {{ .Values.transmission.username | quote }}
+        - name: HOMEPAGE_VAR_TR_PASS
+          value: {{ .Values.transmission.password | quote }}
         volumeMounts:
         - name: shared-keys
           mountPath: /run/shared
