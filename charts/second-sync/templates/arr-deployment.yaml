@@ -28,7 +28,6 @@ spec:
           volumeMounts:
             - name: vpn-key
               mountPath: /etc/vpn/mull.key
-              subPath: mull.key
               readOnly: true
             - name: shared-keys
               mountPath: /run/shared
@@ -65,7 +64,6 @@ spec:
         volumeMounts:
           - name: vpn-key
             mountPath: /etc/vpn/mull.key
-            subPath: mull.key
             readOnly: true
 
       - name: transmission
