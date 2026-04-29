@@ -187,8 +187,6 @@ data:
 
       # 2. Patch Jellyseerr Configuration File
       FILE="/jellyseerr/settings.json"
-      
-      # We only patch if the file exists and is not empty
       if [ -f "$FILE" ] && [ -s "$FILE" ]; then
         if jq -e ".main" "$FILE" > /dev/null 2>&1; then
           echo "Checking Jellyseerr settings..."
@@ -199,7 +197,7 @@ data:
             .main.localLogin = true |
             .main.mediaServerLogin = true |
             .public.initialized = true |
-            .jellyfin.ip = "jellyfin.flux-system.svc.cluster.local" |
+            .jellyfin.ip = "10.43.5.49" |
             .jellyfin.hostname = "jellyfin.flux-system.svc.cluster.local" |
             .jellyfin.port = 8096 |
             .jellyfin.useSsl = false |
@@ -209,87 +207,44 @@ data:
             .radarr = [.radarr[] | select(.hostname == "127.0.0.1" or .hostname == "100.67.54.105")] |
             .sonarr = [.sonarr[] | select(.hostname == "127.0.0.1" or .hostname == "100.67.54.105")]
           ' "$FILE" > "$TMP"
-          
           if ! diff -q "$FILE" "$TMP" > /dev/null; then
             echo "Jellyseerr settings mismatch. Updating..."
             mv "$TMP" "$FILE"
-            # Trigger a reload by killing node
             pkill -f node
           else
             echo "Jellyseerr settings are correct."
             rm "$TMP"
           fi
-          
-          # 3. Sync Libraries via API (after giving it time to start)
           if curl -s "http://localhost:5055/api/v1/status" | grep -q "version"; then
              echo "Triggering Jellyfin Library Sync via API..."
              curl -s -X GET "http://localhost:5055/api/v1/settings/jellyfin/library?sync=true" -H "X-Api-Key: $API_KEY" > /dev/null
-             
-             # Also trigger the "Sync" endpoint which populates the server data
              curl -s -X POST "http://localhost:5055/api/v1/settings/jellyfin/sync" -H "X-Api-Key: $API_KEY" > /dev/null
-          fi
-
-          
-          # Link Radarr to Jellyseerr via API
-          if curl -s "http://127.0.0.1:5055/api/v1/status" | grep -q "version"; then
-            R_PROFILE_ID=$(curl -s "http://127.0.0.1:7878/api/v3/qualityprofile?apikey=$API_KEY" | jq -r ".[] | select(.name == \"Any\") | .id")
-            if [ -z "$R_PROFILE_ID" ] || [ "$R_PROFILE_ID" == "null" ]; then R_PROFILE_ID=1; fi
-            
-            # Check if Radarr is already linked or needs an update
-            RADARR_JSON=$(curl -s -X GET "http://127.0.0.1:5055/api/v1/settings/radarr" -H "X-Api-Key: $API_KEY")
-            if ! echo "$RADARR_JSON" | jq -e ".[] | select(.hostname == \"127.0.0.1\" and .apiKey == \"$API_KEY\")" > /dev/null 2>&1; then
-              echo "Linking/Updating Radarr in Jellyseerr..."
-              curl -s -X POST "http://127.0.0.1:5055/api/v1/settings/radarr" -H "X-Api-Key: $API_KEY" -H "Content-Type: application/json" \
-                -d "{\"name\": \"Radarr\", \"hostname\": \"127.0.0.1\", \"port\": 7878, \"apiKey\": \"$API_KEY\", \"useSsl\": false, \"baseUrl\": \"\", \"activeProfileId\": $R_PROFILE_ID, \"activeProfileName\": \"Any\", \"activeDirectory\": \"/downloads\", \"isDefault\": true, \"syncLevel\": 1, \"is4k\": false, \"minimumAvailability\": \"announced\"}"
-            fi
-
-            # Link Sonarr to Jellyseerr
-            S_PROFILE_ID=$(curl -s "http://127.0.0.1:8989/api/v3/qualityprofile?apikey=$API_KEY" | jq -r ".[] | select(.name == \"Any\") | .id")
-            if [ -z "$S_PROFILE_ID" ] || [ "$S_PROFILE_ID" == "null" ]; then S_PROFILE_ID=1; fi
-
-            SONARR_JSON=$(curl -s -X GET "http://127.0.0.1:5055/api/v1/settings/sonarr" -H "X-Api-Key: $API_KEY")
-            if ! echo "$SONARR_JSON" | jq -e ".[] | select(.hostname == \"127.0.0.1\" and .apiKey == \"$API_KEY\")" > /dev/null 2>&1; then
-              echo "Linking/Updating Sonarr in Jellyseerr..."
-              curl -s -X POST "http://127.0.0.1:5055/api/v1/settings/sonarr" -H "X-Api-Key: $API_KEY" -H "Content-Type: application/json" \
-                -d "{\"name\": \"Sonarr\", \"hostname\": \"127.0.0.1\", \"port\": 8989, \"apiKey\": \"$API_KEY\", \"useSsl\": false, \"baseUrl\": \"\", \"activeProfileId\": $S_PROFILE_ID, \"activeProfileName\": \"Any\", \"activeDirectory\": \"/downloads\", \"isDefault\": true, \"syncLevel\": 1, \"is4k\": false, \"enableSeasonFolders\": true}"
-            fi
-
-            # Trigger Jellyfin Library Scan
-            echo "Triggering Jellyfin Library Scan in Jellyseerr..."
-            curl -s -X POST "http://127.0.0.1:5055/api/v1/settings/jobs/jellyfin-recently-added-scan/run" -H "X-Api-Key: $API_KEY" > /dev/null
           fi
         fi
       fi
 
-      # 2. Jellyfin Language Defaults
-      USERS=$(curl -s -H "X-Emby-Token: $J_TOKEN" "$JELLYFIN_URL/Users")
-      if [ ! -z "$USERS" ] && echo "$USERS" | grep -q "Id"; then
-        for USER_ID in $(echo "$USERS" | jq -r '.[].Id'); do
-          CURRENT_CONF=$(curl -s -H "X-Emby-Token: $J_TOKEN" "$JELLYFIN_URL/Users/$USER_ID/Configuration")
-          if [ ! -z "$CURRENT_CONF" ] && [ "$CURRENT_CONF" != "null" ]; then
-            if [ "$(echo "$CURRENT_CONF" | jq -r '.AudioLanguagePreference')" != "eng" ] || [ "$(echo "$CURRENT_CONF" | jq -r '.SubtitleLanguagePreference')" != "eng" ] || [ "$(echo "$CURRENT_CONF" | jq -r '.SubtitleMode')" != "NoSubtitles" ]; then
-              echo "Setting English/NoSubtitles defaults for Jellyfin user $USER_ID..."
-              UPDATED_CONF=$(echo "$CURRENT_CONF" | jq '.AudioLanguagePreference = "eng" | .SubtitleLanguagePreference = "eng" | .SubtitleMode = "NoSubtitles"')
-              curl -s -X POST -H "X-Emby-Token: $J_TOKEN" -H "Content-Type: application/json" \
-                "$JELLYFIN_URL/Users/$USER_ID/Configuration" -d "$UPDATED_CONF" > /dev/null
-            fi
+      # 3. Jellyfin HWAccel Patching
+      JELLYFIN_CONF="/jellyfin-config/config/encoding.xml"
+      if [ -f "$JELLYFIN_CONF" ]; then
+        if ! grep -q "<EnableHardwareScaling>true</EnableHardwareScaling>" "$JELLYFIN_CONF"; then
+          echo "Patching Jellyfin hardware acceleration..."
+          sed -i "s|<HardwareAccelerationType>.*</HardwareAccelerationType>|<HardwareAccelerationType>nvenc</HardwareAccelerationType>|" "$JELLYFIN_CONF"
+          sed -i "s|<EnableTonemapping>.*</EnableTonemapping>|<EnableTonemapping>true</EnableTonemapping>|" "$JELLYFIN_CONF"
+          sed -i "s|<EnableVppTonemapping>.*</EnableVppTonemapping>|<EnableVppTonemapping>true</EnableVppTonemapping>|" "$JELLYFIN_CONF"
+          sed -i "s|<AllowHevcEncoding>.*</AllowHevcEncoding>|<AllowHevcEncoding>true</AllowHevcEncoding>|" "$JELLYFIN_CONF"
+          sed -i "s|<EnableEnhancedNvdecDecoder>.*</EnableEnhancedNvdecDecoder>|<EnableEnhancedNvdecDecoder>true</EnableEnhancedNvdecDecoder>|" "$JELLYFIN_CONF"
+          if ! grep -q "EnableHardwareScaling" "$JELLYFIN_CONF"; then
+            sed -i "/<\/EncodingOptions>/i \  <EnableHardwareScaling>true</EnableHardwareScaling>" "$JELLYFIN_CONF"
+          else
+            sed -i "s|<EnableHardwareScaling>.*</EnableHardwareScaling>|<EnableHardwareScaling>true</EnableHardwareScaling>|" "$JELLYFIN_CONF"
           fi
-        done
-      fi
-
-      # 3. ARM Config Patching
-      ARM_CONF="/arm-config/arm.yaml"
-      if [ -f "$ARM_CONF" ]; then
-        if ! grep -q "SKIP_TRANSCODE: true" "$ARM_CONF"; then
-          sed -i 's|RAW_PATH:.*|RAW_PATH: "/home/arm/media/.arm/raw/"|' "$ARM_CONF"
-          sed -i 's|TRANSCODE_PATH:.*|TRANSCODE_PATH: "/home/arm/media/.arm/transcode/"|' "$ARM_CONF"
-          sed -i 's|COMPLETED_PATH:.*|COMPLETED_PATH: "/home/arm/media/Movies/"|' "$ARM_CONF"
-          sed -i 's|DISABLE_LOGIN:.*|DISABLE_LOGIN: true|' "$ARM_CONF"
-          sed -i 's|SKIP_TRANSCODE:.*|SKIP_TRANSCODE: true|' "$ARM_CONF"
-          sed -i 's|RIPMETHOD:.*|RIPMETHOD: "mkv"|' "$ARM_CONF"
-          sed -i 's|METADATA_PROVIDER:.*|METADATA_PROVIDER: "none"|' "$ARM_CONF"
-          mkdir -p /home/arm/media/.arm/raw /home/arm/media/.arm/transcode
-          chown -R 1000:1000 /home/arm/media/.arm
+          
+          # Ensure all Hardware Decoding Codecs are present
+          for CODEC in h264 hevc mpeg2video mpeg4 vc1 vp8 vp9 av1; do
+            if ! grep -q "<string>$CODEC</string>" "$JELLYFIN_CONF"; then
+              sed -i "/<HardwareDecodingCodecs>/a \    <string>$CODEC</string>" "$JELLYFIN_CONF"
+            fi
+          done
         fi
       fi
 
@@ -299,41 +254,22 @@ data:
         if ! grep -q "apikey: $API_KEY" "$BAZARR_CONF"; then
           echo "Patching Bazarr API key..."
           sed -i "s/apikey: .*/apikey: $API_KEY/" "$BAZARR_CONF"
-          # Trigger a reload by killing python process for Bazarr
           pkill -9 -f bazarr
         fi
       fi
 
-      # 5. Jellyfin HWAccel Patching
-      JELLYFIN_CONF="/jellyfin-config/config/encoding.xml"
-      if [ -f "$JELLYFIN_CONF" ]; then
-        if ! grep -q "<HardwareAccelerationType>nvenc</HardwareAccelerationType>" "$JELLYFIN_CONF" || ! grep -q "<EnableHardwareScaling>true</EnableHardwareScaling>" "$JELLYFIN_CONF"; then
-          echo "Patching Jellyfin hardware acceleration..."
-          # Enable NVENC and Tonemapping
-          sed -i "s|<HardwareAccelerationType>.*</HardwareAccelerationType>|<HardwareAccelerationType>nvenc</HardwareAccelerationType>|" "$JELLYFIN_CONF"
-          sed -i "s|<EnableTonemapping>.*</EnableTonemapping>|<EnableTonemapping>true</EnableTonemapping>|" "$JELLYFIN_CONF"
-          sed -i "s|<EnableVppTonemapping>.*</EnableVppTonemapping>|<EnableVppTonemapping>true</EnableVppTonemapping>|" "$JELLYFIN_CONF"
-          sed -i "s|<AllowHevcEncoding>.*</AllowHevcEncoding>|<AllowHevcEncoding>true</AllowHevcEncoding>|" "$JELLYFIN_CONF"
-          sed -i "s|<EnableEnhancedNvdecDecoder>.*</EnableEnhancedNvdecDecoder>|<EnableEnhancedNvdecDecoder>true</EnableEnhancedNvdecDecoder>|" "$JELLYFIN_CONF"
-          
-          # Add EnableHardwareScaling if missing, otherwise enable it
-          if ! grep -q "EnableHardwareScaling" "$JELLYFIN_CONF"; then
-            sed -i "/<\/EncodingOptions>/i \  <EnableHardwareScaling>true</EnableHardwareScaling>" "$JELLYFIN_CONF"
-          else
-            sed -i "s|<EnableHardwareScaling>.*</EnableHardwareScaling>|<EnableHardwareScaling>true</EnableHardwareScaling>|" "$JELLYFIN_CONF"
-          fi
-
-          # Enable all Hardware Decoding Codecs
-          # We'll use a simplified approach to ensure the main ones are there
-          for CODEC in h264 hevc mpeg2video mpeg4 vc1 vp8 vp9 av1; do
-            if ! grep -q "<string>$CODEC</string>" "$JELLYFIN_CONF"; then
-              sed -i "/<HardwareDecodingCodecs>/a \    <string>$CODEC</string>" "$JELLYFIN_CONF"
-            fi
-          done
-          
-          # Force Jellyfin to reload config by killing it (it will be restarted by k8s)
-          # Note: We need to find a way to signal jellyfin or just let it be.
-          # Deleting the pod is safer.
+      # 5. ARM Config Patching
+      ARM_CONF="/arm-config/arm.yaml"
+      if [ -f "$ARM_CONF" ]; then
+        if ! grep -q "SKIP_TRANSCODE: true" "$ARM_CONF"; then
+          echo "Patching ARM config..."
+          sed -i 's|RAW_PATH:.*|RAW_PATH: "/home/arm/media/.arm/raw/"|' "$ARM_CONF"
+          sed -i 's|TRANSCODE_PATH:.*|TRANSCODE_PATH: "/home/arm/media/.arm/transcode/"|' "$ARM_CONF"
+          sed -i 's|COMPLETED_PATH:.*|COMPLETED_PATH: "/home/arm/media/Movies/"|' "$ARM_CONF"
+          sed -i 's|DISABLE_LOGIN:.*|DISABLE_LOGIN: true|' "$ARM_CONF"
+          sed -i 's|SKIP_TRANSCODE:.*|SKIP_TRANSCODE: true|' "$ARM_CONF"
+          sed -i 's|RIPMETHOD:.*|RIPMETHOD: "mkv"|' "$ARM_CONF"
+          sed -i 's|METADATA_PROVIDER:.*|METADATA_PROVIDER: "none"|' "$ARM_CONF"
         fi
       fi
 
@@ -360,8 +296,8 @@ data:
             done
         fi
       fi
-      
-      # 5. Trigger a sync in Prowlarr
+
+      # 7. Sync Indexers
       curl -s -X POST "http://127.0.0.1:9696/api/v1/command?apikey=$API_KEY" -H "Content-Type: application/json" -d '{"name": "ApplicationIndexerSync"}' > /dev/null
 
       sleep 300
