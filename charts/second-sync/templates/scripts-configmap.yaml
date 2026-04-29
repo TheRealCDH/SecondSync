@@ -169,8 +169,10 @@ data:
             R_PROFILE_ID=$(curl -s "http://127.0.0.1:7878/api/v3/qualityprofile?apikey=$API_KEY" | jq -r ".[] | select(.name == \"Any\") | .id")
             if [ -z "$R_PROFILE_ID" ] || [ "$R_PROFILE_ID" == "null" ]; then R_PROFILE_ID=1; fi
             
-            if ! curl -s -X GET "http://127.0.0.1:5055/api/v1/settings/radarr" -H "X-Api-Key: $API_KEY" | jq -e ".[] | select(.hostname == \"127.0.0.1\")" > /dev/null 2>&1; then
-              echo "Linking Radarr to Jellyseerr..."
+            # Check if Radarr is already linked or needs an update
+            RADARR_JSON=$(curl -s -X GET "http://127.0.0.1:5055/api/v1/settings/radarr" -H "X-Api-Key: $API_KEY")
+            if ! echo "$RADARR_JSON" | jq -e ".[] | select(.hostname == \"127.0.0.1\" and .apiKey == \"$API_KEY\")" > /dev/null 2>&1; then
+              echo "Linking/Updating Radarr in Jellyseerr..."
               curl -s -X POST "http://127.0.0.1:5055/api/v1/settings/radarr" -H "X-Api-Key: $API_KEY" -H "Content-Type: application/json" \
                 -d "{\"name\": \"Radarr\", \"hostname\": \"127.0.0.1\", \"port\": 7878, \"apiKey\": \"$API_KEY\", \"useSsl\": false, \"baseUrl\": \"\", \"activeProfileId\": $R_PROFILE_ID, \"activeProfileName\": \"Any\", \"activeDirectory\": \"/downloads\", \"isDefault\": true, \"syncLevel\": 1, \"is4k\": false, \"minimumAvailability\": \"announced\"}"
             fi
@@ -179,11 +181,16 @@ data:
             S_PROFILE_ID=$(curl -s "http://127.0.0.1:8989/api/v3/qualityprofile?apikey=$API_KEY" | jq -r ".[] | select(.name == \"Any\") | .id")
             if [ -z "$S_PROFILE_ID" ] || [ "$S_PROFILE_ID" == "null" ]; then S_PROFILE_ID=1; fi
 
-            if ! curl -s -X GET "http://127.0.0.1:5055/api/v1/settings/sonarr" -H "X-Api-Key: $API_KEY" | jq -e ".[] | select(.hostname == \"127.0.0.1\")" > /dev/null 2>&1; then
-              echo "Linking Sonarr to Jellyseerr..."
+            SONARR_JSON=$(curl -s -X GET "http://127.0.0.1:5055/api/v1/settings/sonarr" -H "X-Api-Key: $API_KEY")
+            if ! echo "$SONARR_JSON" | jq -e ".[] | select(.hostname == \"127.0.0.1\" and .apiKey == \"$API_KEY\")" > /dev/null 2>&1; then
+              echo "Linking/Updating Sonarr in Jellyseerr..."
               curl -s -X POST "http://127.0.0.1:5055/api/v1/settings/sonarr" -H "X-Api-Key: $API_KEY" -H "Content-Type: application/json" \
                 -d "{\"name\": \"Sonarr\", \"hostname\": \"127.0.0.1\", \"port\": 8989, \"apiKey\": \"$API_KEY\", \"useSsl\": false, \"baseUrl\": \"\", \"activeProfileId\": $S_PROFILE_ID, \"activeProfileName\": \"Any\", \"activeDirectory\": \"/downloads\", \"isDefault\": true, \"syncLevel\": 1, \"is4k\": false, \"enableSeasonFolders\": true}"
             fi
+
+            # Trigger Jellyfin Library Scan
+            echo "Triggering Jellyfin Library Scan in Jellyseerr..."
+            curl -s -X POST "http://127.0.0.1:5055/api/v1/settings/jobs/jellyfin-recently-added-scan/run" -H "X-Api-Key: $API_KEY" > /dev/null
           fi
         fi
       fi
