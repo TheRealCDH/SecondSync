@@ -129,7 +129,7 @@ data:
 
     # 2. Radarr/Sonarr -> Transmission
     for PORT in 7878 8989; do
-      echo "Ensuring Transmission is linked in app on port $PORT..."
+      echo "Ensuring Transmission is linked in app on port $PORT with user $USER..."
       EXISTING=$(curl -s "http://127.0.0.1:$PORT/api/v3/downloadclient?apikey=$API_KEY" | jq -c ".[] | select(.name == \"Transmission\")")
       if [ ! -z "$EXISTING" ]; then
         ID=$(echo $EXISTING | jq -r .id)
@@ -299,6 +299,8 @@ data:
         if ! grep -q "apikey: $API_KEY" "$BAZARR_CONF"; then
           echo "Patching Bazarr API key..."
           sed -i "s/apikey: .*/apikey: $API_KEY/" "$BAZARR_CONF"
+          # Trigger a reload by killing python process for Bazarr
+          pkill -9 -f bazarr
         fi
       fi
 
