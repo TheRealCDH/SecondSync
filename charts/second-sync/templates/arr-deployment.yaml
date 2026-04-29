@@ -216,8 +216,8 @@ spec:
             mkdir -p /app/config
             cp /app/config-cm/*.yaml /app/config/
             export HOMEPAGE_VAR_API_KEY=$(cat /run/shared/api_key)
-            export HOMEPAGE_VAR_TR_USER={{ .Values.transmission.username | quote }}
-            export HOMEPAGE_VAR_TR_PASS={{ .Values.transmission.password | quote }}
+            export HOMEPAGE_VAR_TR_USER={{ .Values.transmission.username }}
+            export HOMEPAGE_VAR_TR_PASS={{ .Values.transmission.password }}
             exec /usr/local/bin/node server.js
         env:
         - name: HOMEPAGE_ALLOWED_HOSTS
@@ -249,6 +249,8 @@ spec:
             readOnly: true
           - name: config-overseerr
             mountPath: /jellyseerr
+          - name: config-bazarr
+            mountPath: /bazarr-config
           - name: config-arm
             mountPath: /arm-config
             subPath: config

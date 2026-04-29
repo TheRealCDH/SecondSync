@@ -294,7 +294,17 @@ data:
         fi
       fi
 
-      # 4. Auto-tag Indexers for FlareSolverr
+      # 4. Bazarr API Key Patching
+      BAZARR_CONF="/bazarr-config/config.yaml"
+      if [ -f "$BAZARR_CONF" ]; then
+        if ! grep -q "apikey: $API_KEY" "$BAZARR_CONF"; then
+          echo "Patching Bazarr API key..."
+          sed -i "s/apikey: .*/apikey: $API_KEY/" "$BAZARR_CONF"
+          # We don't necessarily need to restart Bazarr as it often reloads or we can just kill it once
+        fi
+      fi
+
+      # 5. Auto-tag Indexers for FlareSolverr
       TAG_ID=$(curl -s "http://127.0.0.1:9696/api/v1/tag?apikey=$API_KEY" | jq -r ".[] | select(.label == \"flaresolverr\") | .id")
       if [ -z "$TAG_ID" ] || [ "$TAG_ID" == "null" ]; then
         TAG_ID=$(curl -s -X POST "http://127.0.0.1:9696/api/v1/tag?apikey=$API_KEY" -H "Content-Type: application/json" -d "{\"label\": \"flaresolverr\"}" | jq -r ".id")
