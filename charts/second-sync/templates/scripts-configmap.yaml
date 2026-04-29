@@ -144,6 +144,8 @@ data:
           jq --arg key "$API_KEY" --arg jkey "$J_TOKEN" '
             .main.apiKey = $key |
             .main.mediaServerType = 2 |
+            .main.localLogin = false |
+            .main.mediaServerLogin = false |
             .jellyfin.ip = "jellyfin.flux-system.svc.cluster.local" |
             .jellyfin.hostname = "jellyfin.flux-system.svc.cluster.local" |
             .jellyfin.port = 8096 |
