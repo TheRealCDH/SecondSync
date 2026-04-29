@@ -199,6 +199,7 @@ data:
             .public.initialized = true |
             .jellyfin.ip = "10.43.5.49" |
             .jellyfin.hostname = "jellyfin.flux-system.svc.cluster.local" |
+            .jellyfin.externalHostname = "http://100.67.54.105:30007" |
             .jellyfin.port = 8096 |
             .jellyfin.useSsl = false |
             .jellyfin.apiKey = $jkey |
