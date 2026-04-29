@@ -257,6 +257,8 @@ spec:
             mountPath: /jellyseerr
           - name: config-bazarr
             mountPath: /bazarr-config
+          - name: config-jellyfin
+            mountPath: /jellyfin-config
           - name: config-arm
             mountPath: /arm-config
             subPath: config

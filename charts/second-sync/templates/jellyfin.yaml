@@ -24,9 +24,45 @@ spec:
             FILE="/config/config/encoding.xml"
             if [ -f "$FILE" ]; then
               echo "Patching Jellyfin hardware acceleration..."
-              sed -i "s|<HardwareAccelerationType>.*</HardwareAccelerationType>|<HardwareAccelerationType>nvenc</HardwareAccelerationType>|" "$FILE"
-              sed -i "s|<EnableTonemapping>.*</EnableTonemapping>|<EnableTonemapping>true</EnableTonemapping>|" "$FILE"
-              sed -i "s|<EnableVppTonemapping>.*</EnableVppTonemapping>|<EnableVppTonemapping>true</EnableVppTonemapping>|" "$FILE"
+              # Use a simple python script via apk
+              apk add --no-cache python3
+              python3 -c '
+import xml.etree.ElementTree as ET
+import os
+
+path = "'$FILE'"
+tree = ET.parse(path)
+root = tree.getroot()
+
+options = {
+    "HardwareAccelerationType": "nvenc",
+    "EnableTonemapping": "true",
+    "EnableVppTonemapping": "true",
+    "AllowHevcEncoding": "true",
+    "EnableHardwareScaling": "true",
+    "EnableEnhancedNvdecDecoder": "true",
+    "PreferSystemNativeHwDecoder": "true",
+    "EnableHardwareEncoding": "true"
+}
+
+for tag, val in options.items():
+    node = root.find(tag)
+    if node is None:
+        node = ET.SubElement(root, tag)
+    node.text = val
+
+# Handle HardwareDecodingCodecs
+hwd = root.find("HardwareDecodingCodecs")
+if hwd is not None:
+    root.remove(hwd)
+hwd = ET.SubElement(root, "HardwareDecodingCodecs")
+codecs = ["h264", "hevc", "mpeg2video", "mpeg4", "vc1", "vp8", "vp9", "av1"]
+for c in codecs:
+    s = ET.SubElement(hwd, "string")
+    s.text = c
+
+tree.write(path, encoding="utf-16", xml_declaration=True)
+'
             fi
         volumeMounts:
         - name: config-jellyfin
@@ -44,7 +80,6 @@ spec:
             nvidia.com/gpu: 1
         volumeMounts:
         - name: config-jellyfin
-
           mountPath: /config
         - name: jellyfin-cache
           mountPath: /cache

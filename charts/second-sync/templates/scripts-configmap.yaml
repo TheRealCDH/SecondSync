@@ -304,7 +304,40 @@ data:
         fi
       fi
 
-      # 5. Auto-tag Indexers for FlareSolverr
+      # 5. Jellyfin HWAccel Patching
+      JELLYFIN_CONF="/jellyfin-config/config/encoding.xml"
+      if [ -f "$JELLYFIN_CONF" ]; then
+        if ! grep -q "<HardwareAccelerationType>nvenc</HardwareAccelerationType>" "$JELLYFIN_CONF" || ! grep -q "<EnableHardwareScaling>true</EnableHardwareScaling>" "$JELLYFIN_CONF"; then
+          echo "Patching Jellyfin hardware acceleration..."
+          # Enable NVENC and Tonemapping
+          sed -i "s|<HardwareAccelerationType>.*</HardwareAccelerationType>|<HardwareAccelerationType>nvenc</HardwareAccelerationType>|" "$JELLYFIN_CONF"
+          sed -i "s|<EnableTonemapping>.*</EnableTonemapping>|<EnableTonemapping>true</EnableTonemapping>|" "$JELLYFIN_CONF"
+          sed -i "s|<EnableVppTonemapping>.*</EnableVppTonemapping>|<EnableVppTonemapping>true</EnableVppTonemapping>|" "$JELLYFIN_CONF"
+          sed -i "s|<AllowHevcEncoding>.*</AllowHevcEncoding>|<AllowHevcEncoding>true</AllowHevcEncoding>|" "$JELLYFIN_CONF"
+          sed -i "s|<EnableEnhancedNvdecDecoder>.*</EnableEnhancedNvdecDecoder>|<EnableEnhancedNvdecDecoder>true</EnableEnhancedNvdecDecoder>|" "$JELLYFIN_CONF"
+          
+          # Add EnableHardwareScaling if missing, otherwise enable it
+          if ! grep -q "EnableHardwareScaling" "$JELLYFIN_CONF"; then
+            sed -i "/<\/EncodingOptions>/i \  <EnableHardwareScaling>true</EnableHardwareScaling>" "$JELLYFIN_CONF"
+          else
+            sed -i "s|<EnableHardwareScaling>.*</EnableHardwareScaling>|<EnableHardwareScaling>true</EnableHardwareScaling>|" "$JELLYFIN_CONF"
+          fi
+
+          # Enable all Hardware Decoding Codecs
+          # We'll use a simplified approach to ensure the main ones are there
+          for CODEC in h264 hevc mpeg2video mpeg4 vc1 vp8 vp9 av1; do
+            if ! grep -q "<string>$CODEC</string>" "$JELLYFIN_CONF"; then
+              sed -i "/<HardwareDecodingCodecs>/a \    <string>$CODEC</string>" "$JELLYFIN_CONF"
+            fi
+          done
+          
+          # Force Jellyfin to reload config by killing it (it will be restarted by k8s)
+          # Note: We need to find a way to signal jellyfin or just let it be.
+          # Deleting the pod is safer.
+        fi
+      fi
+
+      # 6. Auto-tag Indexers for FlareSolverr
       TAG_ID=$(curl -s "http://127.0.0.1:9696/api/v1/tag?apikey=$API_KEY" | jq -r ".[] | select(.label == \"flaresolverr\") | .id")
       if [ -z "$TAG_ID" ] || [ "$TAG_ID" == "null" ]; then
         TAG_ID=$(curl -s -X POST "http://127.0.0.1:9696/api/v1/tag?apikey=$API_KEY" -H "Content-Type: application/json" -d "{\"label\": \"flaresolverr\"}" | jq -r ".id")
