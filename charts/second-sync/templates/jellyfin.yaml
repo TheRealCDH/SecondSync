@@ -28,8 +28,13 @@ spec:
               sed -i "s|<EnableTonemapping>.*</EnableTonemapping>|<EnableTonemapping>true</EnableTonemapping>|" "$FILE"
               sed -i "s|<EnableVppTonemapping>.*</EnableVppTonemapping>|<EnableVppTonemapping>true</EnableVppTonemapping>|" "$FILE"
               sed -i "s|<AllowHevcEncoding>.*</AllowHevcEncoding>|<AllowHevcEncoding>true</AllowHevcEncoding>|" "$FILE"
-              sed -i "s|<EnableHardwareScaling>.*</EnableHardwareScaling>|<EnableHardwareScaling>true</EnableHardwareScaling>|" "$FILE"
               sed -i "s|<EnableEnhancedNvdecDecoder>.*</EnableEnhancedNvdecDecoder>|<EnableEnhancedNvdecDecoder>true</EnableEnhancedNvdecDecoder>|" "$FILE"
+              # Add Hardware Scaling if missing, then set to true
+              if ! grep -q "EnableHardwareScaling" "$FILE"; then
+                sed -i "/<\/EncodingOptions>/i \  <EnableHardwareScaling>true</EnableHardwareScaling>" "$FILE"
+              else
+                sed -i "s|<EnableHardwareScaling>.*</EnableHardwareScaling>|<EnableHardwareScaling>true</EnableHardwareScaling>|" "$FILE"
+              fi
             fi
         volumeMounts:
         - name: config-jellyfin
