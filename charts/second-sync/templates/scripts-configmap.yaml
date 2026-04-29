@@ -228,59 +228,59 @@ data:
       if [ -f "$JELLYFIN_CONF" ]; then
         echo "Ensuring Jellyfin hardware acceleration is optimized..."
         python3 -c '
-import xml.etree.ElementTree as ET
-import os
+    import xml.etree.ElementTree as ET
+    import os
 
-path = "/jellyfin-config/config/encoding.xml"
-try:
-    tree = ET.parse(path)
-    root = tree.getroot()
+    path = "/jellyfin-config/config/encoding.xml"
+    try:
+        tree = ET.parse(path)
+        root = tree.getroot()
 
-    options = {
-        "HardwareAccelerationType": "nvenc",
-        "EnableTonemapping": "true",
-        "EnableVppTonemapping": "true",
-        "AllowHevcEncoding": "true",
-        "EnableHardwareScaling": "true",
-        "EnableEnhancedNvdecDecoder": "true",
-        "PreferSystemNativeHwDecoder": "true",
-        "EnableHardwareEncoding": "true"
-    }
+        options = {
+            "HardwareAccelerationType": "nvenc",
+            "EnableTonemapping": "true",
+            "EnableVppTonemapping": "true",
+            "AllowHevcEncoding": "true",
+            "EnableHardwareScaling": "true",
+            "EnableEnhancedNvdecDecoder": "true",
+            "PreferSystemNativeHwDecoder": "true",
+            "EnableHardwareEncoding": "true"
+        }
 
-    changed = False
-    for tag, val in options.items():
-        node = root.find(tag)
-        if node is None:
-            node = ET.SubElement(root, tag)
-            node.text = val
+        changed = False
+        for tag, val in options.items():
+            node = root.find(tag)
+            if node is None:
+                node = ET.SubElement(root, tag)
+                node.text = val
+                changed = True
+            elif node.text != val:
+                node.text = val
+                changed = True
+
+        hwd = root.find("HardwareDecodingCodecs")
+        codecs = ["h264", "hevc", "mpeg2video", "mpeg4", "vc1", "vp8", "vp9", "av1"]
+        if hwd is None:
+            hwd = ET.SubElement(root, "HardwareDecodingCodecs")
             changed = True
-        elif node.text != val:
-            node.text = val
-            changed = True
+        
+        for c in codecs:
+            found = False
+            for s in hwd.findall("string"):
+                if s.text == c:
+                    found = True
+                    break
+            if not found:
+                s = ET.SubElement(hwd, "string")
+                s.text = c
+                changed = True
 
-    hwd = root.find("HardwareDecodingCodecs")
-    codecs = ["h264", "hevc", "mpeg2video", "mpeg4", "vc1", "vp8", "vp9", "av1"]
-    if hwd is None:
-        hwd = ET.SubElement(root, "HardwareDecodingCodecs")
-        changed = True
-    
-    for c in codecs:
-        found = False
-        for s in hwd.findall("string"):
-            if s.text == c:
-                found = True
-                break
-        if not found:
-            s = ET.SubElement(hwd, "string")
-            s.text = c
-            changed = True
-
-    if changed:
-        print("Settings updated. Writing to file...")
-        tree.write(path, encoding="utf-8", xml_declaration=True)
-except Exception as e:
-    print(f"Error patching Jellyfin: {e}")
-'
+        if changed:
+            print("Settings updated. Writing to file...")
+            tree.write(path, encoding="utf-8", xml_declaration=True)
+    except Exception as e:
+        print(f"Error patching Jellyfin: {e}")
+    '
       fi
 
       # 4. Bazarr API Key Patching
