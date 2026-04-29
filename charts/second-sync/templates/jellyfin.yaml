@@ -15,6 +15,22 @@ spec:
       nodeSelector:
         kubernetes.io/hostname: {{ .Values.nodeName }}
       runtimeClassName: nvidia
+      initContainers:
+      - name: jellyfin-patch
+        image: alpine
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            FILE="/config/config/encoding.xml"
+            if [ -f "$FILE" ]; then
+              echo "Patching Jellyfin hardware acceleration..."
+              sed -i "s|<HardwareAccelerationType>.*</HardwareAccelerationType>|<HardwareAccelerationType>nvenc</HardwareAccelerationType>|" "$FILE"
+              sed -i "s|<EnableTonemapping>.*</EnableTonemapping>|<EnableTonemapping>true</EnableTonemapping>|" "$FILE"
+              sed -i "s|<EnableVppTonemapping>.*</EnableVppTonemapping>|<EnableVppTonemapping>true</EnableVppTonemapping>|" "$FILE"
+            fi
+        volumeMounts:
+        - name: config-jellyfin
+          mountPath: /config
       containers:
       - name: jellyfin
         image: {{ .Values.images.jellyfin }}
