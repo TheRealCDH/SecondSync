@@ -3,6 +3,53 @@ kind: ConfigMap
 metadata:
   name: arr-scripts
 data:
+  overseerr-patch.sh: |
+    #!/bin/sh
+    echo "Applying persistent auth bypass patches..."
+    
+    # 1. Patch Middleware (Force req.user = user 1 and set session)
+    AUTH_FILE="/app/dist/middleware/auth.js"
+    if [ -f "$AUTH_FILE" ]; then
+      cat <<EOF > "$AUTH_FILE"
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.isAuthenticated = exports.checkUser = void 0;
+    const datasource_1 = require("../datasource");
+    const User_1 = require("../entity/User");
+    const checkUser = async (req, _res, next) => {
+        const userRepository = (0, datasource_1.getRepository)(User_1.User);
+        try {
+            let user = await userRepository.findOne({ where: { id: 1 } });
+            if (user) {
+                req.user = user;
+                if (req.session) { req.session.userId = 1; }
+            }
+        } catch (e) {}
+        req.locale = "en";
+        next();
+    };
+    exports.checkUser = checkUser;
+    const isAuthenticated = (permissions, options) => {
+        return (req, res, next) => { next(); };
+    };
+    exports.isAuthenticated = isAuthenticated;
+    EOF
+    fi
+
+    # 2. Patch Auth Routes (Make login endpoints succeed immediately)
+    ROUTES_FILE="/app/dist/routes/auth.js"
+    if [ -f "$ROUTES_FILE" ]; then
+      # We just need to make sure /api/v1/auth/me returns the user, 
+      # and /jellyfin /local return success.
+      # Actually our checkUser already handles /me and everything else.
+      # But to be safe for the UI redirect:
+      sed -i 's/authRoutes.post("\/jellyfin",/authRoutes.post("\/jellyfin", async (req, res) => { if (req.session) req.session.userId = 1; const userRepository = (0, datasource_1.getRepository)(User_1.User); const user = await userRepository.findOne({ where: { id: 1 } }); return res.status(200).json(user.filter()); }, async (req, res, next) => { /' "$ROUTES_FILE"
+      sed -i 's/authRoutes.post("\/local",/authRoutes.post("\/local", async (req, res) => { if (req.session) req.session.userId = 1; const userRepository = (0, datasource_1.getRepository)(User_1.User); const user = await userRepository.findOne({ where: { id: 1 } }); return res.status(200).json(user.filter()); }, async (req, res, next) => { /' "$ROUTES_FILE"
+    fi
+
+    echo "Starting Overseerr..."
+    exec /usr/local/bin/node dist/index.js
+
   proxy.py: |
     import http.server, socketserver, requests, json, time
     FLARESOLVERR_URL = "http://localhost:8191/v1"

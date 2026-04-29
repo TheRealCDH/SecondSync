@@ -73,8 +73,8 @@ spec:
         command: ["/bin/sh", "-c"]
         args:
           - |
-            export USER={{ .Values.transmission.username }}
-            export PASS={{ .Values.transmission.password }}
+            export USER={{ .Values.transmission.username | quote }}
+            export PASS={{ .Values.transmission.password | quote }}
             exec /init
         env:
           - name: PUID
@@ -187,6 +187,7 @@ spec:
 
       - name: overseerr
         image: {{ .Values.images.overseerr }}
+        command: ["/bin/sh", "/run/scripts/overseerr-patch.sh"]
         env:
         - name: PUID
           value: "1000"
@@ -195,9 +196,9 @@ spec:
         volumeMounts:
         - name: config-overseerr
           mountPath: /app/config
-        - name: overseerr-auth-patch
-          mountPath: /app/dist/middleware/auth.js
-          subPath: auth.js
+        - name: arr-scripts
+          mountPath: /run/scripts
+          readOnly: true
 
       - name: flaresolverr
         image: {{ .Values.images.flaresolverr }}
@@ -258,9 +259,6 @@ spec:
       - name: arr-scripts
         configMap:
           name: arr-scripts
-      - name: overseerr-auth-patch
-        configMap:
-          name: overseerr-auth-patch
       - name: vpn-key
         hostPath:
           path: /root/mull.key
