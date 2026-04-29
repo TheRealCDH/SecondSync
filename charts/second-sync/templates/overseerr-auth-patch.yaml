@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: overseerr-auth-patch
+  namespace: flux-system
+data:
+  auth.js: |
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.isAuthenticated = exports.checkUser = void 0;
+    const datasource_1 = require("../datasource");
+    const User_1 = require("../entity/User");
+    const settings_1 = require("../lib/settings");
+    const checkUser = async (req, _res, next) => {
+        const userRepository = (0, datasource_1.getRepository)(User_1.User);
+        // Force User ID 1 (Admin) for every single request
+        let user = await userRepository.findOne({ where: { id: 1 } });
+        if (user) {
+            req.user = user;
+        }
+        req.locale = user?.settings?.locale ? user.settings.locale : "en";
+        next();
+    };
+    exports.checkUser = checkUser;
+    const isAuthenticated = (permissions, options) => {
+        const authMiddleware = (req, res, next) => {
+            // If checkUser forced a user, we are always "authenticated"
+            if (!req.user) {
+                 // Fallback just in case DB is not ready
+                 next();
+                 return;
+            }
+            next();
+        };
+        return authMiddleware;
+    };
+    exports.isAuthenticated = isAuthenticated;
