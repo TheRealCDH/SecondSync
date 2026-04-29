@@ -228,6 +228,8 @@ spec:
           value: {{ .Values.transmission.username | quote }}
         - name: HOMEPAGE_VAR_TR_PASS
           value: {{ .Values.transmission.password | quote }}
+        - name: HOMEPAGE_VAR_API_KEY
+          value: "a1d445fc08be3c9c7f90e3e23ca8b5a1" # Hardcoded for now to ensure it works, or use cat in args
         volumeMounts:
         - name: shared-keys
           mountPath: /run/shared

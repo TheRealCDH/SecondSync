@@ -42,7 +42,6 @@ data:
     # 2. Patch Auth Routes (Make login endpoints succeed immediately)
     ROUTES_FILE="/app/dist/routes/auth.js"
     if [ -f "$ROUTES_FILE" ]; then
-      # Make /jellyfin and /local always return user 1
       sed -i 's/authRoutes.post("\/jellyfin",/authRoutes.post("\/jellyfin", async (req, res) => { if (req.session) req.session.userId = 1; const userRepository = (0, datasource_1.getRepository)(User_1.User); const user = await userRepository.findOne({ where: { id: 1 } }); return res.status(200).json(user.filter()); }, async (req, res, next) => { /' "$ROUTES_FILE"
       sed -i 's/authRoutes.post("\/local",/authRoutes.post("\/local", async (req, res) => { if (req.session) req.session.userId = 1; const userRepository = (0, datasource_1.getRepository)(User_1.User); const user = await userRepository.findOne({ where: { id: 1 } }); return res.status(200).json(user.filter()); }, async (req, res, next) => { /' "$ROUTES_FILE"
     fi
@@ -295,12 +294,11 @@ data:
       fi
 
       # 4. Bazarr API Key Patching
-      BAZARR_CONF="/bazarr-config/config.yaml"
+      BAZARR_CONF="/bazarr-config/config/config.yaml"
       if [ -f "$BAZARR_CONF" ]; then
         if ! grep -q "apikey: $API_KEY" "$BAZARR_CONF"; then
           echo "Patching Bazarr API key..."
           sed -i "s/apikey: .*/apikey: $API_KEY/" "$BAZARR_CONF"
-          # We don't necessarily need to restart Bazarr as it often reloads or we can just kill it once
         fi
       fi
 
