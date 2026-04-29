@@ -70,13 +70,11 @@ spec:
 
       - name: transmission
         image: {{ .Values.images.transmission }}
-        command: ["/bin/sh", "-c"]
-        args:
-          - |
-            export USER={{ .Values.transmission.username | quote }}
-            export PASS={{ .Values.transmission.password | quote }}
-            exec /init
         env:
+          - name: USER
+            value: {{ .Values.transmission.username | quote }}
+          - name: PASS
+            value: {{ .Values.transmission.password | quote }}
           - name: PUID
             value: "1000"
           - name: PGID
