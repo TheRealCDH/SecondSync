@@ -42,7 +42,7 @@ data:
     
     # Install dependencies
     echo "Installing tools..."
-    apk add --no-cache curl jq
+    apk add --no-cache curl jq sqlite
     python3 -m pip install requests
     
     API_KEY=$(cat /run/shared/api_key)
@@ -133,7 +133,13 @@ data:
     while true; do
       echo "--- Loop iteration $(date) ---"
       
-      # Patch Jellyseerr Configuration File
+      # 1. Ensure DB has the correct Admin User
+      if [ -f "/jellyseerr/db/db.sqlite3" ]; then
+        echo "Ensuring Admin user is correctly configured in DB..."
+        sqlite3 /jellyseerr/db/db.sqlite3 "UPDATE user SET username='root', email='admin@admin.local', jellyfinUsername='root', jellyfinUserId='f41a73621251487ebb26c9061c4d684e', jellyfinAuthToken='$J_TOKEN', userType=3, permissions=2 WHERE id=1;"
+      fi
+
+      # 2. Patch Jellyseerr Configuration File
       FILE="/jellyseerr/settings.json"
       
       # We only patch if the file exists and is not empty
@@ -144,8 +150,9 @@ data:
           jq --arg key "$API_KEY" --arg jkey "$J_TOKEN" '
             .main.apiKey = $key |
             .main.mediaServerType = 2 |
-            .main.localLogin = false |
-            .main.mediaServerLogin = false |
+            .main.localLogin = true |
+            .main.mediaServerLogin = true |
+            .public.initialized = true |
             .jellyfin.ip = "jellyfin.flux-system.svc.cluster.local" |
             .jellyfin.hostname = "jellyfin.flux-system.svc.cluster.local" |
             .jellyfin.port = 8096 |
@@ -153,16 +160,29 @@ data:
             .jellyfin.apiKey = $jkey |
             .jellyfin.name = "Main" |
             .jellyfin.serverId = "26da23e0782d488382b90388c48397bd" |
-            (.jellyfin.libraries[] | select(.id != null) | .enabled) = true
+            .radarr = [.radarr[] | select(.hostname == "127.0.0.1" or .hostname == "100.67.54.105")] |
+            .sonarr = [.sonarr[] | select(.hostname == "127.0.0.1" or .hostname == "100.67.54.105")]
           ' "$FILE" > "$TMP"
           
           if ! diff -q "$FILE" "$TMP" > /dev/null; then
             echo "Jellyseerr settings mismatch. Updating..."
             mv "$TMP" "$FILE"
+            # Trigger a reload by killing node
+            pkill -f node
           else
             echo "Jellyseerr settings are correct."
             rm "$TMP"
           fi
+          
+          # 3. Sync Libraries via API (after giving it time to start)
+          if curl -s "http://localhost:5055/api/v1/status" | grep -q "version"; then
+             echo "Triggering Jellyfin Library Sync via API..."
+             curl -s -X GET "http://localhost:5055/api/v1/settings/jellyfin/library?sync=true" -H "X-Api-Key: $API_KEY" > /dev/null
+             
+             # Also trigger the "Sync" endpoint which populates the server data
+             curl -s -X POST "http://localhost:5055/api/v1/settings/jellyfin/sync" -H "X-Api-Key: $API_KEY" > /dev/null
+          fi
+
           
           # Link Radarr to Jellyseerr via API
           if curl -s "http://127.0.0.1:5055/api/v1/status" | grep -q "version"; then

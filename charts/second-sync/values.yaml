@@ -26,8 +26,8 @@ ports:
 
 # Transmission Credentials
 transmission:
-  username: admin
-  password: admin
+  username: root
+  password: root
 
 # Image Tags
 images:
