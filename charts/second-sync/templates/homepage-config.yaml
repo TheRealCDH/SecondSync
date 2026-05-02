@@ -2,6 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: homepage-config
+  namespace: flux-system
 data:
   settings.yaml: |
     title: SecondSync Dashboard
@@ -32,7 +33,7 @@ data:
             description: Request Management
             widget:
               type: jellyseerr
-              url: http://localhost:5055
+              url: http://127.0.0.1:5055
               key: {{ "{{" }}HOMEPAGE_VAR_API_KEY{{ "}}" }}
         - Prowlarr:
             icon: prowlarr.png
@@ -40,7 +41,7 @@ data:
             description: Indexer Management
             widget:
               type: prowlarr
-              url: http://localhost:9696
+              url: http://127.0.0.1:9696
               key: {{ "{{" }}HOMEPAGE_VAR_API_KEY{{ "}}" }}
 
     - Media:
@@ -50,7 +51,7 @@ data:
             description: Media Server
             widget:
               type: jellyfin
-              url: http://jellyfin:8096
+              url: http://100.67.54.105:30007
               key: 2727b02a3f414e0b95b9401cbaaa5c02
         - Sonarr:
             icon: sonarr.png
@@ -58,7 +59,7 @@ data:
             description: TV Series
             widget:
               type: sonarr
-              url: http://localhost:8989
+              url: http://127.0.0.1:8989
               key: {{ "{{" }}HOMEPAGE_VAR_API_KEY{{ "}}" }}
         - Radarr:
             icon: radarr.png
@@ -66,7 +67,7 @@ data:
             description: Movies
             widget:
               type: radarr
-              url: http://localhost:7878
+              url: http://127.0.0.1:7878
               key: {{ "{{" }}HOMEPAGE_VAR_API_KEY{{ "}}" }}
         - Bazarr:
             icon: bazarr.png
@@ -74,7 +75,7 @@ data:
             description: Subtitles
             widget:
               type: bazarr
-              url: http://localhost:6767
+              url: http://127.0.0.1:6767
               key: {{ "{{" }}HOMEPAGE_VAR_API_KEY{{ "}}" }}
 
     - Download:
@@ -84,7 +85,7 @@ data:
             description: Torrent Client
             widget:
               type: transmission
-              url: http://localhost:9091
+              url: http://127.0.0.1:9091
               username: {{ "{{" }}HOMEPAGE_VAR_TR_USER{{ "}}" }}
               password: {{ "{{" }}HOMEPAGE_VAR_TR_PASS{{ "}}" }}
         - ARM:
