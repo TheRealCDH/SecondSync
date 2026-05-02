@@ -19,37 +19,7 @@ spec:
       initContainers:
       - name: key-derivator
         image: alpine
-        command: ["/bin/sh", "-c"]
-        args:
-          - |
-            apk add --no-cache jq sqlite
-            # 1. Derive Keys
-            RAW_KEY=$(cat /etc/vpn/mull.key | tr -d '\n\r ')
-            API_KEY=$(echo "$RAW_KEY" | sha256sum | cut -c1-32)
-            PASSWORD=$(echo "$RAW_KEY" | sha256sum | cut -c1-16)
-            echo "$API_KEY" > /run/shared/api_key
-            echo "$PASSWORD" > /run/shared/password
-            
-            # 2. Initialize Jellyseerr (Overseerr) Config
-            CONFIG_DIR="/jellyseerr"
-            FILE="$CONFIG_DIR/settings.json"
-            DB_DIR="$CONFIG_DIR/db"
-            DB_FILE="$DB_DIR/db.sqlite3"
-            
-            mkdir -p "$DB_DIR"
-            
-            # Create a robust settings.json if missing or invalid
-            if [ ! -s "$FILE" ] || ! jq -e ".main.mediaServerType" "$FILE" > /dev/null 2>&1; then
-              echo '{"main":{"applicationTitle":"Jellyseerr","applicationUrl":"","mediaServerType":2,"localLogin":true,"mediaServerLogin":true,"newPlexLogin":true,"apiKey":"'${API_KEY}'","locale":"en","originalLanguage":"","streamingRegion":"","discoverRegion":"","cacheImages":false,"defaultPermissions":32,"blacklistedTags":"","blacklistedTagsLimit":50,"hideBlacklisted":false,"hideAvailable":false,"partialRequestsEnabled":true,"enableSpecialEpisodes":false,"youtubeUrl":"","defaultQuotas":{"movie":{},"tv":{}}},"jellyfin":{"name":"Main","ip":"100.67.54.105","hostname":"100.67.54.105","port":30007,"useSsl":false,"apiKey":"2727b02a3f414e0b95b9401cbaaa5c02","serverId":"26da23e0782d488382b90388c48397bd","libraries":[]},"public":{"initialized":true},"network":{"forceIpv4First":false,"csrfProtection":false,"trustProxy":false,"proxy":{"enabled":false,"hostname":"","port":8080,"useSsl":false,"user":"","password":"","bypassLocalAddresses":true,"bypassFilter":""}},"notifications":{"agents":{}},"jobs":{},"radarr":[],"sonarr":[],"tautulli":{}}' > "$FILE"
-            fi
-            
-            # Ensure DB has the admin user
-            echo "Ensuring Admin user is correctly configured in DB..."
-            sqlite3 "$DB_FILE" "CREATE TABLE IF NOT EXISTS user (id INTEGER PRIMARY KEY AUTOINCREMENT, email VARCHAR NOT NULL, username VARCHAR, permissions INTEGER NOT NULL DEFAULT 0, userType INTEGER NOT NULL DEFAULT 1, avatar VARCHAR NOT NULL, jellyfinUsername VARCHAR, jellyfinUserId VARCHAR, jellyfinAuthToken VARCHAR, createdAt DATETIME, updatedAt DATETIME);"
-            sqlite3 "$DB_FILE" "INSERT OR IGNORE INTO user (id, email, username, permissions, userType, avatar, jellyfinUsername, jellyfinUserId, jellyfinAuthToken, createdAt, updatedAt) VALUES (1, 'admin@admin.local', 'root', 2, 3, '', 'root', 'f41a73621251487ebb26c9061c4d684e', '2727b02a3f414e0b95b9401cbaaa5c02', datetime('now'), datetime('now'));"
-            sqlite3 "$DB_FILE" "UPDATE user SET username='root', email='admin@admin.local', jellyfinUsername='root', jellyfinUserId='f41a73621251487ebb26c9061c4d684e', jellyfinAuthToken='2727b02a3f414e0b95b9401cbaaa5c02', userType=3, permissions=2 WHERE id=1;"
-            
-            chown -R 1000:1000 "$CONFIG_DIR"
+        command: ["/bin/sh", "/run/scripts/init.sh"]
         volumeMounts:
         - name: vpn-key
           mountPath: /etc/vpn/mull.key
@@ -58,6 +28,9 @@ spec:
           mountPath: /run/shared
         - name: config-overseerr
           mountPath: /jellyseerr
+        - name: arr-scripts
+          mountPath: /run/scripts
+          readOnly: true
       containers:
       # --- VPN GATEWAY ---
       - name: gluetun
