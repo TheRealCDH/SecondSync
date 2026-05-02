@@ -167,16 +167,17 @@ data:
         sqlite3 /jellyfin-config/data/jellyfin.db "INSERT OR IGNORE INTO ApiKeys (DateCreated, DateLastActivity, Name, AccessToken) VALUES ('2026-05-02 00:00:00', '2026-05-02 00:00:00', 'SecondSync-Auto', '$J_TOKEN');"
       fi
 
-      USERS=$(curl -s -H "X-Emby-Token: $J_TOKEN" http://100.67.54.105:30007/Users)
+      # Use internal service for language settings
+      USERS=$(curl -s -H "X-Emby-Token: $J_TOKEN" http://jellyfin:8096/Users)
       if [ ! -z "$USERS" ] && echo "$USERS" | grep -q "Id"; then
         for USER_ID in $(echo "$USERS" | jq -r '.[].Id'); do
-          CURRENT_CONF=$(curl -s -H "X-Emby-Token: $J_TOKEN" "http://100.67.54.105:30007/Users/$USER_ID/Configuration")
+          CURRENT_CONF=$(curl -s -H "X-Emby-Token: $J_TOKEN" "http://jellyfin:8096/Users/$USER_ID/Configuration")
           if [ ! -z "$CURRENT_CONF" ] && [ "$CURRENT_CONF" != "null" ]; then
             if [ "$(echo "$CURRENT_CONF" | jq -r '.AudioLanguagePreference')" != "eng" ] || [ "$(echo "$CURRENT_CONF" | jq -r '.SubtitleLanguagePreference')" != "eng" ] || [ "$(echo "$CURRENT_CONF" | jq -r '.SubtitleMode')" != "NoSubtitles" ]; then
               echo "Setting English/NoSubtitles defaults for Jellyfin user $USER_ID..."
               UPDATED_CONF=$(echo "$CURRENT_CONF" | jq '.AudioLanguagePreference = "eng" | .SubtitleLanguagePreference = "eng" | .SubtitleMode = "NoSubtitles"')
               curl -s -X POST -H "X-Emby-Token: $J_TOKEN" -H "Content-Type: application/json" \
-                "http://100.67.54.105:30007/Users/$USER_ID/Configuration" -d "$UPDATED_CONF" > /dev/null
+                "http://jellyfin:8096/Users/$USER_ID/Configuration" -d "$UPDATED_CONF" > /dev/null
             fi
           fi
         done
