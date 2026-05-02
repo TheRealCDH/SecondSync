@@ -40,79 +40,13 @@ spec:
             
             # Create a robust settings.json if missing or invalid
             if [ ! -s "$FILE" ] || ! jq -e ".main.mediaServerType" "$FILE" > /dev/null 2>&1; then
-              echo "Initializing Jellyseerr settings.json..."
-              cat <<EOF > "$FILE"
-            {
-              "main": {
-                "applicationTitle": "Jellyseerr",
-                "applicationUrl": "",
-                "mediaServerType": 2,
-                "localLogin": true,
-                "mediaServerLogin": true,
-                "newPlexLogin": true,
-                "apiKey": "$API_KEY",
-                "locale": "en",
-                "originalLanguage": "",
-                "streamingRegion": "",
-                "discoverRegion": "",
-                "cacheImages": false,
-                "defaultPermissions": 32,
-                "blacklistedTags": "",
-                "blacklistedTagsLimit": 50,
-                "hideBlacklisted": false,
-                "hideAvailable": false,
-                "partialRequestsEnabled": true,
-                "enableSpecialEpisodes": false,
-                "youtubeUrl": "",
-                "defaultQuotas": {
-                  "movie": {},
-                  "tv": {}
-                }
-              },
-              "jellyfin": {
-                "name": "Main",
-                "ip": "100.67.54.105",
-                "hostname": "100.67.54.105",
-                "port": 30007,
-                "useSsl": false,
-                "apiKey": "2727b02a3f414e0b95b9401cbaaa5c02",
-                "serverId": "26da23e0782d488382b90388c48397bd",
-                "libraries": []
-              },
-              "public": {
-                "initialized": true
-              },
-              "network": {
-                "forceIpv4First": false,
-                "csrfProtection": false,
-                "trustProxy": false,
-                "proxy": {
-                  "enabled": false,
-                  "hostname": "",
-                  "port": 8080,
-                  "useSsl": false,
-                  "user": "",
-                  "password": "",
-                  "bypassLocalAddresses": true,
-                  "bypassFilter": ""
-                }
-              },
-              "notifications": {
-                "agents": {}
-              },
-              "jobs": {},
-              "radarr": [],
-              "sonarr": [],
-              "tautulli": {}
-            }
-            EOF
+              echo '{"main":{"applicationTitle":"Jellyseerr","applicationUrl":"","mediaServerType":2,"localLogin":true,"mediaServerLogin":true,"newPlexLogin":true,"apiKey":"'${API_KEY}'","locale":"en","originalLanguage":"","streamingRegion":"","discoverRegion":"","cacheImages":false,"defaultPermissions":32,"blacklistedTags":"","blacklistedTagsLimit":50,"hideBlacklisted":false,"hideAvailable":false,"partialRequestsEnabled":true,"enableSpecialEpisodes":false,"youtubeUrl":"","defaultQuotas":{"movie":{},"tv":{}}},"jellyfin":{"name":"Main","ip":"100.67.54.105","hostname":"100.67.54.105","port":30007,"useSsl":false,"apiKey":"2727b02a3f414e0b95b9401cbaaa5c02","serverId":"26da23e0782d488382b90388c48397bd","libraries":[]},"public":{"initialized":true},"network":{"forceIpv4First":false,"csrfProtection":false,"trustProxy":false,"proxy":{"enabled":false,"hostname":"","port":8080,"useSsl":false,"user":"","password":"","bypassLocalAddresses":true,"bypassFilter":""}},"notifications":{"agents":{}},"jobs":{},"radarr":[],"sonarr":[],"tautulli":{}}' > "$FILE"
             fi
             
             # Ensure DB has the admin user
-            # We use a dummy avatar to satisfy NOT NULL constraints
             echo "Ensuring Admin user is correctly configured in DB..."
-            sqlite3 "$DB_FILE" "CREATE TABLE IF NOT EXISTS user (id INTEGER PRIMARY KEY AUTOINCREMENT, email VARCHAR NOT NULL, username VARCHAR, permissions INTEGER NOT NULL DEFAULT 0, userType INTEGER NOT NULL DEFAULT 1, avatar VARCHAR NOT NULL, jellyfinUsername VARCHAR, jellyfinUserId VARCHAR, jellyfinAuthToken VARCHAR);"
-            sqlite3 "$DB_FILE" "INSERT OR IGNORE INTO user (id, email, username, permissions, userType, avatar, jellyfinUsername, jellyfinUserId, jellyfinAuthToken) VALUES (1, 'admin@admin.local', 'root', 2, 3, '', 'root', 'f41a73621251487ebb26c9061c4d684e', '2727b02a3f414e0b95b9401cbaaa5c02');"
+            sqlite3 "$DB_FILE" "CREATE TABLE IF NOT EXISTS user (id INTEGER PRIMARY KEY AUTOINCREMENT, email VARCHAR NOT NULL, username VARCHAR, permissions INTEGER NOT NULL DEFAULT 0, userType INTEGER NOT NULL DEFAULT 1, avatar VARCHAR NOT NULL, jellyfinUsername VARCHAR, jellyfinUserId VARCHAR, jellyfinAuthToken VARCHAR, createdAt DATETIME, updatedAt DATETIME);"
+            sqlite3 "$DB_FILE" "INSERT OR IGNORE INTO user (id, email, username, permissions, userType, avatar, jellyfinUsername, jellyfinUserId, jellyfinAuthToken, createdAt, updatedAt) VALUES (1, 'admin@admin.local', 'root', 2, 3, '', 'root', 'f41a73621251487ebb26c9061c4d684e', '2727b02a3f414e0b95b9401cbaaa5c02', datetime('now'), datetime('now'));"
             sqlite3 "$DB_FILE" "UPDATE user SET username='root', email='admin@admin.local', jellyfinUsername='root', jellyfinUserId='f41a73621251487ebb26c9061c4d684e', jellyfinAuthToken='2727b02a3f414e0b95b9401cbaaa5c02', userType=3, permissions=2 WHERE id=1;"
             
             chown -R 1000:1000 "$CONFIG_DIR"
@@ -207,6 +141,8 @@ spec:
           mountPath: /media
         - name: media
           mountPath: /downloads
+        - name: media
+          mountPath: /downloads/tv
 
       - name: radarr
         image: {{ .Values.images.radarr }}
@@ -231,6 +167,8 @@ spec:
           mountPath: /media
         - name: media
           mountPath: /downloads
+        - name: media
+          mountPath: /downloads/movies
 
       - name: prowlarr
         image: {{ .Values.images.prowlarr }}
@@ -276,6 +214,8 @@ spec:
           mountPath: /media
         - name: media
           mountPath: /downloads
+        - name: media
+          mountPath: /downloads/movies
 
       - name: overseerr
         image: {{ .Values.images.overseerr }}
