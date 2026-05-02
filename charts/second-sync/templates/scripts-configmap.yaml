@@ -4,51 +4,6 @@ metadata:
   name: arr-scripts
   namespace: flux-system
 data:
-  overseerr-patch.sh: |
-    #!/bin/sh
-    echo "Applying persistent auth bypass patches..."
-    
-    # 1. Patch Middleware (Force req.user = user 1 and set session)
-    AUTH_FILE="/app/dist/middleware/auth.js"
-    if [ -f "$AUTH_FILE" ]; then
-      cat <<'EOF' > "$AUTH_FILE"
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.isAuthenticated = exports.checkUser = void 0;
-    const datasource_1 = require("../datasource");
-    const User_1 = require("../entity/User");
-    const checkUser = async (req, _res, next) => {
-        try {
-            const userRepository = (0, datasource_1.getRepository)(User_1.User);
-            let user = await userRepository.findOne({ where: { id: 1 } });
-            if (user) {
-                req.user = user;
-                if (req.session) { req.session.userId = 1; }
-            }
-        } catch (e) {
-            console.error("Auth bypass error:", e);
-        }
-        req.locale = "en";
-        next();
-    };
-    exports.checkUser = checkUser;
-    const isAuthenticated = (permissions, options) => {
-        return (req, res, next) => { next(); };
-    };
-    exports.isAuthenticated = isAuthenticated;
-    EOF
-    fi
-
-    # 2. Patch Auth Routes (Make login endpoints succeed immediately)
-    ROUTES_FILE="/app/dist/routes/auth.js"
-    if [ -f "$ROUTES_FILE" ]; then
-      sed -i 's/authRoutes.post("\/jellyfin",/authRoutes.post("\/jellyfin", async (req, res) => { if (req.session) req.session.userId = 1; const userRepository = (0, datasource_1.getRepository)(User_1.User); const user = await userRepository.findOne({ where: { id: 1 } }); return res.status(200).json(user.filter()); }, async (req, res, next) => { /' "$ROUTES_FILE"
-      sed -i 's/authRoutes.post("\/local",/authRoutes.post("\/local", async (req, res) => { if (req.session) req.session.userId = 1; const userRepository = (0, datasource_1.getRepository)(User_1.User); const user = await userRepository.findOne({ where: { id: 1 } }); return res.status(200).json(user.filter()); }, async (req, res, next) => { /' "$ROUTES_FILE"
-    fi
-
-    echo "Starting Overseerr..."
-    exec /usr/local/bin/node dist/index.js
-
   proxy.py: |
     import http.server, socketserver, requests, json, time
     FLARESOLVERR_URL = "http://localhost:8191/v1"
@@ -117,11 +72,9 @@ data:
       EXISTING=$(curl -s "http://127.0.0.1:9696/api/v1/applications?apikey=$API_KEY" | jq -c ".[] | select(.name == \"$NAME\")")
       if [ ! -z "$EXISTING" ]; then
         ID=$(echo $EXISTING | jq -r .id)
-        echo "Updating existing $NAME (ID: $ID)..."
         UPDATED=$(echo $EXISTING | jq -c ".syncLevel = \"fullSync\" | .fields = [{\"name\": \"baseUrl\", \"value\": \"http://127.0.0.1:$PORT\"}, {\"name\": \"apiKey\", \"value\": \"$API_KEY\"}]")
         curl -s -X PUT "http://127.0.0.1:9696/api/v1/applications/$ID?apikey=$API_KEY" -H "Content-Type: application/json" -d "$UPDATED" > /dev/null
       else
-        echo "Adding new $NAME..."
         curl -s -X POST "http://127.0.0.1:9696/api/v1/applications?apikey=$API_KEY" -H "Content-Type: application/json" \
           -d "{\"name\": \"$NAME\", \"enabled\": true, \"syncLevel\": \"fullSync\", \"configContract\": \"$CONTRACT\", \"implementation\": \"$NAME\", \"fields\": [{\"name\": \"baseUrl\", \"value\": \"http://127.0.0.1:$PORT\"}, {\"name\": \"apiKey\", \"value\": \"$API_KEY\"}]}" > /dev/null
       fi
@@ -129,15 +82,12 @@ data:
 
     # 2. Radarr/Sonarr -> Transmission
     for PORT in 7878 8989; do
-      echo "Ensuring Transmission is linked in app on port $PORT with user $USER..."
       EXISTING=$(curl -s "http://127.0.0.1:$PORT/api/v3/downloadclient?apikey=$API_KEY" | jq -c ".[] | select(.name == \"Transmission\")")
       if [ ! -z "$EXISTING" ]; then
         ID=$(echo $EXISTING | jq -r .id)
-        echo "Updating Transmission in app on port $PORT..."
         UPDATED=$(echo $EXISTING | jq -c ".fields = [{\"name\": \"host\", \"value\": \"127.0.0.1\"}, {\"name\": \"port\", \"value\": 9091}, {\"name\": \"username\", \"value\": \"$USER\"}, {\"name\": \"password\", \"value\": \"$PASSWORD\"}]")
         curl -s -X PUT "http://127.0.0.1:$PORT/api/v3/downloadclient/$ID?apikey=$API_KEY" -H "Content-Type: application/json" -d "$UPDATED" > /dev/null
       else
-        echo "Adding Transmission to app on port $PORT..."
         curl -s -X POST "http://127.0.0.1:$PORT/api/v3/downloadclient?apikey=$API_KEY" -H "Content-Type: application/json" \
           -d "{\"name\": \"Transmission\", \"enable\": true, \"priority\": 1, \"implementation\": \"Transmission\", \"configContract\": \"TransmissionSettings\", \"fields\": [{\"name\": \"host\", \"value\": \"127.0.0.1\"}, {\"name\": \"port\", \"value\": 9091}, {\"name\": \"username\", \"value\": \"$USER\"}, {\"name\": \"password\", \"value\": \"$PASSWORD\"}]}" > /dev/null
       fi
@@ -146,8 +96,7 @@ data:
     # 3. Add Root Folder /downloads
     for PORT in 7878 8989; do
       if ! curl -s "http://127.0.0.1:$PORT/api/v3/rootfolder?apikey=$API_KEY" | jq -e ".[] | select(.path == \"/downloads\")" > /dev/null; then
-        echo "Adding Root Folder /downloads to app on port $PORT..."
-        curl -s -X POST "http://127.0.0.1:$PORT/api/v3/rootfolder?apikey=$API_KEY" -H "Content-Type: application/json" -d "{\"path\": \"/downloads\"}"
+        curl -s -X POST "http://127.0.0.1:$PORT/api/v3/rootfolder?apikey=$API_KEY" -H "Content-Type: application/json" -d "{\"path\": \"/downloads\"}" > /dev/null
       fi
     done
 
@@ -155,25 +104,20 @@ data:
     EXISTING_FS=$(curl -s "http://127.0.0.1:9696/api/v1/indexerproxy?apikey=$API_KEY" | jq -c ".[] | select(.name == \"FlareSolverr\")")
     if [ ! -z "$EXISTING_FS" ]; then
       ID=$(echo $EXISTING_FS | jq -r .id)
-      echo "Updating FlareSolverr proxy..."
       UPDATED=$(echo $EXISTING_FS | jq -c ".fields = [{\"name\": \"host\", \"value\": \"http://127.0.0.1:8191\"}, {\"name\": \"requestTimeout\", \"value\": 60}]")
       curl -s -X PUT "http://127.0.0.1:9696/api/v1/indexerproxy/$ID?apikey=$API_KEY" -H "Content-Type: application/json" -d "$UPDATED" > /dev/null
     else
-      echo "Adding FlareSolverr API to Prowlarr..."
       curl -s -X POST "http://127.0.0.1:9696/api/v1/indexerproxy?apikey=$API_KEY" -H "Content-Type: application/json" \
         -d "{\"name\": \"FlareSolverr\", \"enabled\": true, \"implementation\": \"FlareSolverr\", \"configContract\": \"FlareSolverrSettings\", \"fields\": [{\"name\": \"host\", \"value\": \"http://127.0.0.1:8191\"}, {\"name\": \"requestTimeout\", \"value\": 60}]}" > /dev/null
     fi
 
     # 5. Global HTTP Proxy
     if ! curl -s "http://127.0.0.1:9696/api/v1/indexerproxy?apikey=$API_KEY" | jq -e ".[] | select(.name == \"FlareSolverr-Global\")" > /dev/null; then
-      echo "Adding FlareSolverr-Global HTTP Proxy..."
       curl -s -X POST "http://127.0.0.1:9696/api/v1/indexerproxy?apikey=$API_KEY" -H "Content-Type: application/json" \
-        -d "{\"name\": \"FlareSolverr-Global\", \"enabled\": true, \"implementation\": \"Http\", \"configContract\": \"HttpSettings\", \"fields\": [{\"name\": \"host\", \"value\": \"127.0.0.1\"}, {\"name\": \"port\", \"value\": 8118}]}"
+        -d "{\"name\": \"FlareSolverr-Global\", \"enabled\": true, \"implementation\": \"Http\", \"configContract\": \"HttpSettings\", \"fields\": [{\"name\": \"host\", \"value\": \"127.0.0.1\"}, {\"name\": \"port\", \"value\": 8118}]}" > /dev/null
     fi
 
-    # 2. Jellyfin Language Defaults
     J_TOKEN="2727b02a3f414e0b95b9401cbaaa5c02"
-    JELLYFIN_URL="http://jellyfin.flux-system.svc.cluster.local:8096"
 
     echo "Automation complete. Entering loop..."
     while true; do
@@ -182,123 +126,80 @@ data:
       # 1. Ensure DB has the correct Admin User
       if [ -f "/jellyseerr/db/db.sqlite3" ]; then
         echo "Ensuring Admin user is correctly configured in DB..."
+        # We use INSERT OR IGNORE and then UPDATE to ensure ID 1 is our admin
+        sqlite3 /jellyseerr/db/db.sqlite3 "INSERT OR IGNORE INTO user (id, email, username, permissions, userType, avatar) VALUES (1, 'admin@admin.local', 'root', 2, 3, '');"
         sqlite3 /jellyseerr/db/db.sqlite3 "UPDATE user SET username='root', email='admin@admin.local', jellyfinUsername='root', jellyfinUserId='f41a73621251487ebb26c9061c4d684e', jellyfinAuthToken='$J_TOKEN', userType=3, permissions=2 WHERE id=1;"
       fi
 
       # 2. Patch Jellyseerr Configuration File
       FILE="/jellyseerr/settings.json"
-      if [ -f "$FILE" ] && [ -s "$FILE" ]; then
-        if jq -e ".main" "$FILE" > /dev/null 2>&1; then
-          echo "Checking Jellyseerr settings..."
-          TMP=$(mktemp)
-          jq --arg key "$API_KEY" --arg jkey "$J_TOKEN" '
-            .main.apiKey = $key |
-            .main.mediaServerType = 2 |
-            .main.localLogin = true |
-            .main.mediaServerLogin = true |
-            .public.initialized = true |
-            .jellyfin.ip = "10.43.5.49" |
-            .jellyfin.hostname = "jellyfin.flux-system.svc.cluster.local" |
-            .jellyfin.externalHostname = "http://100.67.54.105:30007" |
-            .jellyfin.port = 8096 |
-            .jellyfin.useSsl = false |
-            .jellyfin.apiKey = $jkey |
-            .jellyfin.name = "Main" |
-            .jellyfin.serverId = "26da23e0782d488382b90388c48397bd" |
-            .radarr = [.radarr[] | select(.hostname == "127.0.0.1" or .hostname == "100.67.54.105")] |
-            .sonarr = [.sonarr[] | select(.hostname == "127.0.0.1" or .hostname == "100.67.54.105")]
-          ' "$FILE" > "$TMP"
-          if ! diff -q "$FILE" "$TMP" > /dev/null; then
-            echo "Jellyseerr settings mismatch. Updating..."
-            mv "$TMP" "$FILE"
-            pkill -f node
-          else
-            echo "Jellyseerr settings are correct."
-            rm "$TMP"
-          fi
-          if curl -s "http://localhost:5055/api/v1/status" | grep -q "version"; then
-             echo "Triggering Jellyfin Library Sync via API..."
-             curl -s -X GET "http://localhost:5055/api/v1/settings/jellyfin/library?sync=true" -H "X-Api-Key: $API_KEY" > /dev/null
-             curl -s -X POST "http://localhost:5055/api/v1/settings/jellyfin/sync" -H "X-Api-Key: $API_KEY" > /dev/null
-          fi
-        fi
+      if [ ! -s "$FILE" ]; then
+        echo '{"main":{"mediaServerType":2},"jellyfin":{"libraries":[]}}' > "$FILE"
       fi
 
-      # 3. Jellyfin HWAccel Patching
-      JELLYFIN_CONF="/jellyfin-config/config/encoding.xml"
-      if [ -f "$JELLYFIN_CONF" ]; then
-        echo "Ensuring Jellyfin hardware acceleration is optimized..."
-        python3 -c '
-    import xml.etree.ElementTree as ET
-    import os
-
-    path = "/jellyfin-config/config/encoding.xml"
-    try:
-        tree = ET.parse(path)
-        root = tree.getroot()
-
-        options = {
-            "HardwareAccelerationType": "nvenc",
-            "EnableTonemapping": "true",
-            "EnableVppTonemapping": "true",
-            "AllowHevcEncoding": "true",
-            "EnableHardwareScaling": "true",
-            "EnableEnhancedNvdecDecoder": "true",
-            "PreferSystemNativeHwDecoder": "true",
-            "EnableHardwareEncoding": "true"
-        }
-
-        changed = False
-        for tag, val in options.items():
-            node = root.find(tag)
-            if node is None:
-                node = ET.SubElement(root, tag)
-                node.text = val
-                changed = True
-            elif node.text != val:
-                node.text = val
-                changed = True
-
-        hwd = root.find("HardwareDecodingCodecs")
-        codecs = ["h264", "hevc", "mpeg2video", "mpeg4", "vc1", "vp8", "vp9", "av1"]
-        if hwd is None:
-            hwd = ET.SubElement(root, "HardwareDecodingCodecs")
-            changed = True
+      if jq -e ".main" "$FILE" > /dev/null 2>&1; then
+        echo "Ensuring Jellyseerr settings are correct..."
+        TMP=$(mktemp)
+        jq --arg key "$API_KEY" --arg jkey "$J_TOKEN" '
+          .main.apiKey = $key |
+          .main.mediaServerType = 2 |
+          .main.localLogin = true |
+          .main.mediaServerLogin = true |
+          .public.initialized = true |
+          .jellyfin.ip = "100.67.54.105" |
+          .jellyfin.hostname = "100.67.54.105" |
+          .jellyfin.port = 30007 |
+          .jellyfin.useSsl = false |
+          .jellyfin.apiKey = $jkey |
+          .jellyfin.name = "Main" |
+          .jellyfin.serverId = "26da23e0782d488382b90388c48397bd" |
+          (.jellyfin.libraries[] | select(.id != null) | .enabled) = true
+        ' "$FILE" > "$TMP" && mv "$TMP" "$FILE"
         
-        for c in codecs:
-            found = False
-            for s in hwd.findall("string"):
-                if s.text == c:
-                    found = True
-                    break
-            if not found:
-                s = ET.SubElement(hwd, "string")
-                s.text = c
-                changed = True
+        # Link Radarr to Jellyseerr via API
+        if curl -s "http://127.0.0.1:5055/api/v1/status" | grep -q "version"; then
+          R_PROFILE_ID=$(curl -s "http://127.0.0.1:7878/api/v3/qualityprofile?apikey=$API_KEY" | jq -r ".[] | select(.name == \"Any\") | .id")
+          if [ -z "$R_PROFILE_ID" ] || [ "$R_PROFILE_ID" == "null" ]; then R_PROFILE_ID=1; fi
+          
+          if ! curl -s -X GET "http://127.0.0.1:5055/api/v1/settings/radarr" -H "X-Api-Key: $API_KEY" | jq -e ".[]" > /dev/null 2>&1; then
+            echo "Linking Radarr to Jellyseerr..."
+            curl -s -X POST "http://127.0.0.1:5055/api/v1/settings/radarr" -H "X-Api-Key: $API_KEY" -H "Content-Type: application/json" \
+              -d "{\"name\": \"Radarr\", \"hostname\": \"127.0.0.1\", \"port\": 7878, \"apiKey\": \"$API_KEY\", \"useSsl\": false, \"baseUrl\": \"\", \"activeProfileId\": $R_PROFILE_ID, \"activeProfileName\": \"Any\", \"activeDirectory\": \"/downloads\", \"isDefault\": true, \"syncLevel\": 1, \"is4k\": false, \"minimumAvailability\": \"announced\"}" > /dev/null
+          fi
 
-        if changed:
-            print("Settings updated. Writing to file...")
-            tree.write(path, encoding="utf-8", xml_declaration=True)
-    except Exception as e:
-        print(f"Error patching Jellyfin: {e}")
-    '
-      fi
+          # Link Sonarr to Jellyseerr
+          S_PROFILE_ID=$(curl -s "http://127.0.0.1:8989/api/v3/qualityprofile?apikey=$API_KEY" | jq -r ".[] | select(.name == \"Any\") | .id")
+          if [ -z "$S_PROFILE_ID" ] || [ "$S_PROFILE_ID" == "null" ]; then S_PROFILE_ID=1; fi
 
-      # 4. Bazarr API Key Patching
-      BAZARR_CONF="/bazarr-config/config/config.yaml"
-      if [ -f "$BAZARR_CONF" ]; then
-        if ! grep -q "apikey: $API_KEY" "$BAZARR_CONF"; then
-          echo "Patching Bazarr API key..."
-          sed -i "s/apikey: .*/apikey: $API_KEY/" "$BAZARR_CONF"
-          pkill -9 -f bazarr
+          if ! curl -s -X GET "http://127.0.0.1:5055/api/v1/settings/sonarr" -H "X-Api-Key: $API_KEY" | jq -e ".[]" > /dev/null 2>&1; then
+            echo "Linking Sonarr to Jellyseerr..."
+            curl -s -X POST "http://127.0.0.1:5055/api/v1/settings/sonarr" -H "X-Api-Key: $API_KEY" -H "Content-Type: application/json" \
+              -d "{\"name\": \"Sonarr\", \"hostname\": \"127.0.0.1\", \"port\": 8989, \"apiKey\": \"$API_KEY\", \"useSsl\": false, \"baseUrl\": \"\", \"activeProfileId\": $S_PROFILE_ID, \"activeProfileName\": \"Any\", \"activeDirectory\": \"/downloads\", \"isDefault\": true, \"syncLevel\": 1, \"is4k\": false, \"enableSeasonFolders\": true}" > /dev/null
+          fi
         fi
       fi
 
-      # 5. ARM Config Patching
+      # 3. Jellyfin Language Defaults
+      USERS=$(curl -s -H "X-Emby-Token: $J_TOKEN" http://100.67.54.105:30007/Users)
+      if [ ! -z "$USERS" ] && echo "$USERS" | grep -q "Id"; then
+        for USER_ID in $(echo "$USERS" | jq -r '.[].Id'); do
+          CURRENT_CONF=$(curl -s -H "X-Emby-Token: $J_TOKEN" "http://100.67.54.105:30007/Users/$USER_ID/Configuration")
+          if [ ! -z "$CURRENT_CONF" ] && [ "$CURRENT_CONF" != "null" ]; then
+            if [ "$(echo "$CURRENT_CONF" | jq -r '.AudioLanguagePreference')" != "eng" ] || [ "$(echo "$CURRENT_CONF" | jq -r '.SubtitleLanguagePreference')" != "eng" ] || [ "$(echo "$CURRENT_CONF" | jq -r '.SubtitleMode')" != "NoSubtitles" ]; then
+              echo "Setting English/NoSubtitles defaults for Jellyfin user $USER_ID..."
+              UPDATED_CONF=$(echo "$CURRENT_CONF" | jq '.AudioLanguagePreference = "eng" | .SubtitleLanguagePreference = "eng" | .SubtitleMode = "NoSubtitles"')
+              curl -s -X POST -H "X-Emby-Token: $J_TOKEN" -H "Content-Type: application/json" \
+                "http://100.67.54.105:30007/Users/$USER_ID/Configuration" -d "$UPDATED_CONF" > /dev/null
+            fi
+          fi
+        done
+      fi
+
+      # 4. ARM Config Patching
       ARM_CONF="/arm-config/arm.yaml"
       if [ -f "$ARM_CONF" ]; then
         if ! grep -q "SKIP_TRANSCODE: true" "$ARM_CONF"; then
-          echo "Patching ARM config..."
+          echo "Patching ARM configuration..."
           sed -i 's|RAW_PATH:.*|RAW_PATH: "/home/arm/media/.arm/raw/"|' "$ARM_CONF"
           sed -i 's|TRANSCODE_PATH:.*|TRANSCODE_PATH: "/home/arm/media/.arm/transcode/"|' "$ARM_CONF"
           sed -i 's|COMPLETED_PATH:.*|COMPLETED_PATH: "/home/arm/media/Movies/"|' "$ARM_CONF"
@@ -306,10 +207,12 @@ data:
           sed -i 's|SKIP_TRANSCODE:.*|SKIP_TRANSCODE: true|' "$ARM_CONF"
           sed -i 's|RIPMETHOD:.*|RIPMETHOD: "mkv"|' "$ARM_CONF"
           sed -i 's|METADATA_PROVIDER:.*|METADATA_PROVIDER: "none"|' "$ARM_CONF"
+          mkdir -p /home/arm/media/.arm/raw /home/arm/media/.arm/transcode
+          chown -R 1000:1000 /home/arm/media/.arm
         fi
       fi
 
-      # 6. Auto-tag Indexers for FlareSolverr
+      # 5. Auto-tag Indexers for FlareSolverr
       TAG_ID=$(curl -s "http://127.0.0.1:9696/api/v1/tag?apikey=$API_KEY" | jq -r ".[] | select(.label == \"flaresolverr\") | .id")
       if [ -z "$TAG_ID" ] || [ "$TAG_ID" == "null" ]; then
         TAG_ID=$(curl -s -X POST "http://127.0.0.1:9696/api/v1/tag?apikey=$API_KEY" -H "Content-Type: application/json" -d "{\"label\": \"flaresolverr\"}" | jq -r ".id")
@@ -332,8 +235,8 @@ data:
             done
         fi
       fi
-
-      # 7. Sync Indexers
+      
+      # 6. Trigger a sync in Prowlarr
       curl -s -X POST "http://127.0.0.1:9696/api/v1/command?apikey=$API_KEY" -H "Content-Type: application/json" -d '{"name": "ApplicationIndexerSync"}' > /dev/null
 
       sleep 300

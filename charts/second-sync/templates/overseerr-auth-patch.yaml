@@ -3,6 +3,9 @@ kind: ConfigMap
 metadata:
   name: overseerr-auth-patch
   namespace: flux-system
+  labels:
+    helm.toolkit.fluxcd.io/name: second-sync
+    helm.toolkit.fluxcd.io/namespace: flux-system
 data:
   auth-middleware.js: |
     "use strict";
@@ -16,6 +19,10 @@ data:
             let user = await userRepository.findOne({ where: { id: 1 } });
             if (user) {
                 req.user = user;
+                if (req.session) { req.session.userId = 1; }
+            } else {
+                // If user doesn't exist, we mock one to allow the app to boot
+                req.user = { id: 1, permissions: 2, hasPermission: () => true };
                 if (req.session) { req.session.userId = 1; }
             }
         } catch (e) {
@@ -38,20 +45,26 @@ data:
     const User_1 = require("../entity/User");
     const authRoutes = (0, express_1.Router)();
     
-    // Always return Admin user for /me
+    const getAdminUser = async () => {
+        try {
+            const userRepository = (0, datasource_1.getRepository)(User_1.User);
+            const user = await userRepository.findOne({ where: { id: 1 } });
+            return user || { id: 1, permissions: 2, filter: () => ({ id: 1, permissions: 2, username: 'root' }) };
+        } catch (e) {
+            return { id: 1, permissions: 2, filter: () => ({ id: 1, permissions: 2, username: 'root' }) };
+        }
+    };
+
     authRoutes.get('/me', async (req, res) => {
-        const userRepository = (0, datasource_1.getRepository)(User_1.User);
-        const user = await userRepository.findOne({ where: { id: 1 } });
+        const user = await getAdminUser();
         if (req.session) req.session.userId = 1;
         return res.status(200).json(user);
     });
 
-    // Always succeed login for /jellyfin and /local
     const autoLogin = async (req, res) => {
-        const userRepository = (0, datasource_1.getRepository)(User_1.User);
-        const user = await userRepository.findOne({ where: { id: 1 } });
+        const user = await getAdminUser();
         if (req.session) req.session.userId = 1;
-        return res.status(200).json(user.filter());
+        return res.status(200).json(user.filter ? user.filter() : user);
     };
 
     authRoutes.post('/jellyfin', autoLogin);
