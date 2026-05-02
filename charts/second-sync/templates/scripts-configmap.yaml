@@ -22,9 +22,9 @@ data:
     
     mkdir -p "$DB_DIR"
     
-    # Robust settings.json with migration fields
+    # Robust settings.json with migration fields - Using INTERNAL jellyfin:8096
     echo "Writing fresh settings.json for Jellyseerr..."
-    printf '{"main":{"applicationTitle":"Jellyseerr","applicationUrl":"","mediaServerType":2,"localLogin":true,"mediaServerLogin":true,"newPlexLogin":true,"apiKey":"%s","locale":"en","originalLanguage":"","streamingRegion":"","discoverRegion":"","cacheImages":false,"defaultPermissions":32,"blacklistedTags":"","blacklistedTagsLimit":50,"hideBlacklisted":false,"hideAvailable":false,"partialRequestsEnabled":true,"enableSpecialEpisodes":false,"youtubeUrl":"","defaultQuotas":{"movie":{},"tv":{}}},"jellyfin":{"name":"Main","ip":"100.67.54.105","hostname":"100.67.54.105","port":30007,"useSsl":false,"apiKey":"2727b02a3f414e0b95b9401cbaaa5c02","serverId":"26da23e0782d488382b90388c48397bd","libraries":[]},"public":{"initialized":true},"network":{"forceIpv4First":false,"csrfProtection":false,"trustProxy":false,"proxy":{"enabled":false,"hostname":"","port":8080,"useSsl":false,"user":"","password":"","bypassLocalAddresses":true,"bypassFilter":""}},"notifications":{"agents":{}},"jobs":{},"radarr":[],"sonarr":[],"tautulli":{}}' "$API_KEY" > "$FILE"
+    printf '{"main":{"applicationTitle":"Jellyseerr","applicationUrl":"","mediaServerType":2,"localLogin":true,"mediaServerLogin":true,"newPlexLogin":true,"apiKey":"%s","locale":"en","originalLanguage":"","streamingRegion":"","discoverRegion":"","cacheImages":false,"defaultPermissions":32,"blacklistedTags":"","blacklistedTagsLimit":50,"hideBlacklisted":false,"hideAvailable":false,"partialRequestsEnabled":true,"enableSpecialEpisodes":false,"youtubeUrl":"","defaultQuotas":{"movie":{},"tv":{}}},"jellyfin":{"name":"Main","ip":"jellyfin","hostname":"jellyfin","port":8096,"useSsl":false,"apiKey":"2727b02a3f414e0b95b9401cbaaa5c02","serverId":"26da23e0782d488382b90388c48397bd","libraries":[]},"public":{"initialized":true},"network":{"forceIpv4First":false,"csrfProtection":false,"trustProxy":false,"proxy":{"enabled":false,"hostname":"","port":8080,"useSsl":false,"user":"","password":"","bypassLocalAddresses":true,"bypassFilter":""}},"notifications":{"agents":{}},"jobs":{},"radarr":[],"sonarr":[],"tautulli":{}}' "$API_KEY" > "$FILE"
     
     # Ensure DB has the admin user
     echo "Ensuring Admin user is correctly configured in DB..."
@@ -196,16 +196,17 @@ data:
         sqlite3 /jellyfin-config/data/jellyfin.db "INSERT OR IGNORE INTO ApiKeys (DateCreated, DateLastActivity, Name, AccessToken) VALUES ('2026-05-02 00:00:00', '2026-05-02 00:00:00', 'SecondSync-Auto', '$J_TOKEN');"
       fi
 
-      USERS=$(curl -s -H "X-Emby-Token: $J_TOKEN" http://100.67.54.105:30007/Users)
+      # Use internal service for language settings
+      USERS=$(curl -s -H "X-Emby-Token: $J_TOKEN" http://jellyfin:8096/Users)
       if [ ! -z "$USERS" ] && echo "$USERS" | grep -q "Id"; then
         for USER_ID in $(echo "$USERS" | jq -r '.[].Id'); do
-          CURRENT_CONF=$(curl -s -H "X-Emby-Token: $J_TOKEN" "http://100.67.54.105:30007/Users/$USER_ID/Configuration")
+          CURRENT_CONF=$(curl -s -H "X-Emby-Token: $J_TOKEN" "http://jellyfin:8096/Users/$USER_ID/Configuration")
           if [ ! -z "$CURRENT_CONF" ] && [ "$CURRENT_CONF" != "null" ]; then
             if [ "$(echo "$CURRENT_CONF" | jq -r '.AudioLanguagePreference')" != "eng" ] || [ "$(echo "$CURRENT_CONF" | jq -r '.SubtitleLanguagePreference')" != "eng" ] || [ "$(echo "$CURRENT_CONF" | jq -r '.SubtitleMode')" != "NoSubtitles" ]; then
               echo "Setting English/NoSubtitles defaults for Jellyfin user $USER_ID..."
               UPDATED_CONF=$(echo "$CURRENT_CONF" | jq '.AudioLanguagePreference = "eng" | .SubtitleLanguagePreference = "eng" | .SubtitleMode = "NoSubtitles"')
               curl -s -X POST -H "X-Emby-Token: $J_TOKEN" -H "Content-Type: application/json" \
-                "http://100.67.54.105:30007/Users/$USER_ID/Configuration" -d "$UPDATED_CONF" > /dev/null
+                "http://jellyfin:8096/Users/$USER_ID/Configuration" -d "$UPDATED_CONF" > /dev/null
             fi
           fi
         done
