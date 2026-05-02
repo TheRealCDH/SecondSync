@@ -14,79 +14,175 @@ spec:
         app: arr-stack
     spec:
       nodeSelector:
-        kubernetes.io/hostname: {{ .Values.nodeName }}
+        kubernetes.io/hostname: ripnix
+      terminationGracePeriodSeconds: 60
       initContainers:
-        - name: key-derivator
-          image: alpine
-          command: ["/bin/sh", "-c"]
-          args:
-            - |
-              # Derive a 32-char hex string from the Wireguard key
-              RAW_KEY=$(cat /etc/vpn/mull.key | tr -d '\n\r ')
-              echo "$RAW_KEY" | sha256sum | cut -c1-32 > /run/shared/api_key
-              echo "$RAW_KEY" | sha256sum | cut -c1-16 > /run/shared/password
-          volumeMounts:
-            - name: vpn-key
-              mountPath: /etc/vpn/mull.key
-              readOnly: true
-            - name: shared-keys
-              mountPath: /run/shared
-
+      - name: key-derivator
+        image: alpine
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            apk add --no-cache jq sqlite
+            # 1. Derive Keys
+            RAW_KEY=$(cat /etc/vpn/mull.key | tr -d '\n\r ')
+            API_KEY=$(echo "$RAW_KEY" | sha256sum | cut -c1-32)
+            PASSWORD=$(echo "$RAW_KEY" | sha256sum | cut -c1-16)
+            echo "$API_KEY" > /run/shared/api_key
+            echo "$PASSWORD" > /run/shared/password
+            
+            # 2. Initialize Jellyseerr (Overseerr) Config
+            CONFIG_DIR="/jellyseerr"
+            FILE="$CONFIG_DIR/settings.json"
+            DB_DIR="$CONFIG_DIR/db"
+            DB_FILE="$DB_DIR/db.sqlite3"
+            
+            mkdir -p "$DB_DIR"
+            
+            # Create a robust settings.json if missing or invalid
+            if [ ! -s "$FILE" ] || ! jq -e ".main.mediaServerType" "$FILE" > /dev/null 2>&1; then
+              echo "Initializing Jellyseerr settings.json..."
+              cat <<EOF > "$FILE"
+            {
+              "main": {
+                "applicationTitle": "Jellyseerr",
+                "applicationUrl": "",
+                "mediaServerType": 2,
+                "localLogin": true,
+                "mediaServerLogin": true,
+                "newPlexLogin": true,
+                "apiKey": "$API_KEY",
+                "locale": "en",
+                "originalLanguage": "",
+                "streamingRegion": "",
+                "discoverRegion": "",
+                "cacheImages": false,
+                "defaultPermissions": 32,
+                "blacklistedTags": "",
+                "blacklistedTagsLimit": 50,
+                "hideBlacklisted": false,
+                "hideAvailable": false,
+                "partialRequestsEnabled": true,
+                "enableSpecialEpisodes": false,
+                "youtubeUrl": "",
+                "defaultQuotas": {
+                  "movie": {},
+                  "tv": {}
+                }
+              },
+              "jellyfin": {
+                "name": "Main",
+                "ip": "100.67.54.105",
+                "hostname": "100.67.54.105",
+                "port": 30007,
+                "useSsl": false,
+                "apiKey": "2727b02a3f414e0b95b9401cbaaa5c02",
+                "serverId": "26da23e0782d488382b90388c48397bd",
+                "libraries": []
+              },
+              "public": {
+                "initialized": true
+              },
+              "network": {
+                "forceIpv4First": false,
+                "csrfProtection": false,
+                "trustProxy": false,
+                "proxy": {
+                  "enabled": false,
+                  "hostname": "",
+                  "port": 8080,
+                  "useSsl": false,
+                  "user": "",
+                  "password": "",
+                  "bypassLocalAddresses": true,
+                  "bypassFilter": ""
+                }
+              },
+              "notifications": {
+                "agents": {}
+              },
+              "jobs": {},
+              "radarr": [],
+              "sonarr": [],
+              "tautulli": {}
+            }
+            EOF
+            fi
+            
+            # Ensure DB has the admin user
+            # We use a dummy avatar to satisfy NOT NULL constraints
+            echo "Ensuring Admin user is correctly configured in DB..."
+            sqlite3 "$DB_FILE" "CREATE TABLE IF NOT EXISTS user (id INTEGER PRIMARY KEY AUTOINCREMENT, email VARCHAR NOT NULL, username VARCHAR, permissions INTEGER NOT NULL DEFAULT 0, userType INTEGER NOT NULL DEFAULT 1, avatar VARCHAR NOT NULL, jellyfinUsername VARCHAR, jellyfinUserId VARCHAR, jellyfinAuthToken VARCHAR);"
+            sqlite3 "$DB_FILE" "INSERT OR IGNORE INTO user (id, email, username, permissions, userType, avatar, jellyfinUsername, jellyfinUserId, jellyfinAuthToken) VALUES (1, 'admin@admin.local', 'root', 2, 3, '', 'root', 'f41a73621251487ebb26c9061c4d684e', '2727b02a3f414e0b95b9401cbaaa5c02');"
+            sqlite3 "$DB_FILE" "UPDATE user SET username='root', email='admin@admin.local', jellyfinUsername='root', jellyfinUserId='f41a73621251487ebb26c9061c4d684e', jellyfinAuthToken='2727b02a3f414e0b95b9401cbaaa5c02', userType=3, permissions=2 WHERE id=1;"
+            
+            chown -R 1000:1000 "$CONFIG_DIR"
+        volumeMounts:
+        - name: vpn-key
+          mountPath: /etc/vpn/mull.key
+          readOnly: true
+        - name: shared-keys
+          mountPath: /run/shared
+        - name: config-overseerr
+          mountPath: /jellyseerr
       containers:
+      # --- VPN GATEWAY ---
       - name: gluetun
         image: {{ .Values.images.gluetun }}
-        securityContext:
-          capabilities:
-            add:
-              - NET_ADMIN
         command: ["/bin/sh", "-c"]
         args:
           - |
             export WIREGUARD_PRIVATE_KEY=$(cat /etc/vpn/mull.key | tr -d '\n\r ')
             exec /gluetun-entrypoint
+        securityContext:
+          capabilities:
+            add: ["NET_ADMIN"]
+          runAsUser: 0
         env:
-          - name: VPN_SERVICE_PROVIDER
-            value: "custom"
-          - name: VPN_TYPE
-            value: "wireguard"
-          - name: WIREGUARD_ENDPOINT_IP
-            value: "77.243.184.130"
-          - name: WIREGUARD_ENDPOINT_PORT
-            value: "51820"
-          - name: WIREGUARD_PUBLIC_KEY
-            value: "5ioE7vTw80KVx0S/zYOZonR5ZkR+uiNJogR9Pyqtwzg="
-          - name: WIREGUARD_ADDRESSES
-            value: "10.68.25.24/32"
-          - name: FIREWALL_OUTBOUND_SUBNETS
-            value: {{ .Values.vpn.localSubnets | quote }}
-          - name: FIREWALL_INPUT_PORTS
-            value: "5055,8989,7878,9091,51413,9696,6767,8080"
+        - name: VPN_SERVICE_PROVIDER
+          value: "custom"
+        - name: VPN_TYPE
+          value: "wireguard"
+        - name: WIREGUARD_ENDPOINT_IP
+          value: "77.243.184.130"
+        - name: WIREGUARD_ENDPOINT_PORT
+          value: "51820"
+        - name: WIREGUARD_PUBLIC_KEY
+          value: "5ioE7vTw80KVx0S/zYOZonR5ZkR+uiNJogR9Pyqtwzg="
+        - name: WIREGUARD_ADDRESSES
+          value: "10.68.25.24/32"
+        - name: FIREWALL_OUTBOUND_SUBNETS
+          value: {{ .Values.vpn.localSubnets | quote }}
+        - name: FIREWALL_INPUT_PORTS
+          value: "5055,8989,7878,9091,51413,9696,6767,8080"
         volumeMounts:
-          - name: vpn-key
-            mountPath: /etc/vpn/mull.key
-            readOnly: true
+        - name: vpn-key
+          mountPath: /etc/vpn/mull.key
+          readOnly: true
 
+      # --- ARR APPS ---
       - name: transmission
         image: {{ .Values.images.transmission }}
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            export USER={{ .Values.transmission.username }}
+            export PASS={{ .Values.transmission.password }}
+            exec /init
         env:
-          - name: USER
-            value: {{ .Values.transmission.username | quote }}
-          - name: PASS
-            value: {{ .Values.transmission.password | quote }}
-          - name: PUID
-            value: "1000"
-          - name: PGID
-            value: "1000"
-          - name: TZ
-            value: "UTC"
+        - name: PUID
+          value: "1000"
+        - name: PGID
+          value: "1000"
+        - name: TZ
+          value: "UTC"
         volumeMounts:
-          - name: config-transmission
-            mountPath: /config
-          - name: media
-            mountPath: /downloads
-          - name: shared-keys
-            mountPath: /run/shared
-            readOnly: true
+        - name: shared-keys
+          mountPath: /run/shared
+          readOnly: true
+        - name: config-transmission
+          mountPath: /config
+        - name: media
+          mountPath: /downloads
 
       - name: sonarr
         image: {{ .Values.images.sonarr }}
@@ -97,20 +193,20 @@ spec:
             export SONARR__AUTH__METHOD=External
             exec /init
         env:
-          - name: PUID
-            value: "1000"
-          - name: PGID
-            value: "1000"
+        - name: PUID
+          value: "1000"
+        - name: PGID
+          value: "1000"
         volumeMounts:
-          - name: config-sonarr
-            mountPath: /config
-          - name: media
-            mountPath: /media
-          - name: media
-            mountPath: /downloads
-          - name: shared-keys
-            mountPath: /run/shared
-            readOnly: true
+        - name: shared-keys
+          mountPath: /run/shared
+          readOnly: true
+        - name: config-sonarr
+          mountPath: /config
+        - name: media
+          mountPath: /media
+        - name: media
+          mountPath: /downloads
 
       - name: radarr
         image: {{ .Values.images.radarr }}
@@ -121,20 +217,20 @@ spec:
             export RADARR__AUTH__METHOD=External
             exec /init
         env:
-          - name: PUID
-            value: "1000"
-          - name: PGID
-            value: "1000"
+        - name: PUID
+          value: "1000"
+        - name: PGID
+          value: "1000"
         volumeMounts:
-          - name: config-radarr
-            mountPath: /config
-          - name: media
-            mountPath: /media
-          - name: media
-            mountPath: /downloads
-          - name: shared-keys
-            mountPath: /run/shared
-            readOnly: true
+        - name: shared-keys
+          mountPath: /run/shared
+          readOnly: true
+        - name: config-radarr
+          mountPath: /config
+        - name: media
+          mountPath: /media
+        - name: media
+          mountPath: /downloads
 
       - name: prowlarr
         image: {{ .Values.images.prowlarr }}
@@ -147,16 +243,16 @@ spec:
             export NO_PROXY=localhost,127.0.0.1,10.0.0.0/8,100.64.0.0/10
             exec /init
         env:
-          - name: PUID
-            value: "1000"
-          - name: PGID
-            value: "1000"
+        - name: PUID
+          value: "1000"
+        - name: PGID
+          value: "1000"
         volumeMounts:
-          - name: config-prowlarr
-            mountPath: /config
-          - name: shared-keys
-            mountPath: /run/shared
-            readOnly: true
+        - name: shared-keys
+          mountPath: /run/shared
+          readOnly: true
+        - name: config-prowlarr
+          mountPath: /config
 
       - name: bazarr
         image: {{ .Values.images.bazarr }}
@@ -166,20 +262,20 @@ spec:
             export BAZARR__AUTH__APIKEY=$(cat /run/shared/api_key)
             exec /init
         env:
-          - name: PUID
-            value: "1000"
-          - name: PGID
-            value: "1000"
+        - name: PUID
+          value: "1000"
+        - name: PGID
+          value: "1000"
         volumeMounts:
-          - name: config-bazarr
-            mountPath: /config
-          - name: media
-            mountPath: /media
-          - name: media
-            mountPath: /downloads
-          - name: shared-keys
-            mountPath: /run/shared
-            readOnly: true
+        - name: shared-keys
+          mountPath: /run/shared
+          readOnly: true
+        - name: config-bazarr
+          mountPath: /config
+        - name: media
+          mountPath: /media
+        - name: media
+          mountPath: /downloads
 
       - name: overseerr
         image: {{ .Values.images.overseerr }}
@@ -214,52 +310,47 @@ spec:
             mkdir -p /app/config
             cp /app/config-cm/*.yaml /app/config/
             export HOMEPAGE_VAR_API_KEY=$(cat /run/shared/api_key)
-            export HOMEPAGE_VAR_TR_USER={{ .Values.transmission.username }}
-            export HOMEPAGE_VAR_TR_PASS={{ .Values.transmission.password }}
+            export HOMEPAGE_VAR_TR_USER={{ .Values.transmission.username | quote }}
+            export HOMEPAGE_VAR_TR_PASS={{ .Values.transmission.password | quote }}
             exec /usr/local/bin/node server.js
         env:
         - name: HOMEPAGE_ALLOWED_HOSTS
           value: "*"
         - name: SAFE_MODE
           value: "true"
-        - name: HOMEPAGE_VAR_TR_USER
-          value: {{ .Values.transmission.username | quote }}
-        - name: HOMEPAGE_VAR_TR_PASS
-          value: {{ .Values.transmission.password | quote }}
-        - name: HOMEPAGE_VAR_API_KEY
-          value: "a1d445fc08be3c9c7f90e3e23ca8b5a1" # Hardcoded for now to ensure it works, or use cat in args
         volumeMounts:
         - name: shared-keys
           mountPath: /run/shared
           readOnly: true
-        - name: config-homepage
-          mountPath: /app/config
         - name: homepage-config
           mountPath: /app/config-cm
+        - name: config-homepage
+          mountPath: /app/config
 
+      # --- AUTO-LINKER SIDE CAR ---
       - name: arr-linker
         image: python:3.11-alpine
         command: ["/bin/sh", "/run/scripts/linker.sh"]
         env:
-          - name: TR_USER
-            value: {{ .Values.transmission.username | quote }}
-          - name: TR_PASS
-            value: {{ .Values.transmission.password | quote }}
+        - name: TR_USER
+          value: {{ .Values.transmission.username | quote }}
+        - name: TR_PASS
+          value: {{ .Values.transmission.password | quote }}
         volumeMounts:
-          - name: arr-scripts
-            mountPath: /run/scripts
-          - name: shared-keys
-            mountPath: /run/shared
-            readOnly: true
-          - name: config-overseerr
-            mountPath: /jellyseerr
-          - name: config-bazarr
-            mountPath: /bazarr-config
-          - name: config-jellyfin
-            mountPath: /jellyfin-config
-          - name: config-arm
-            mountPath: /arm-config
-            subPath: config
+        - name: shared-keys
+          mountPath: /run/shared
+          readOnly: true
+        - name: arr-scripts
+          mountPath: /run/scripts
+        - name: config-overseerr
+          mountPath: /jellyseerr
+        - name: config-bazarr
+          mountPath: /bazarr-config
+        - name: config-jellyfin
+          mountPath: /jellyfin-config
+        - name: config-arm
+          mountPath: /arm-config
+          subPath: config
 
       volumes:
       - name: shared-keys
