@@ -51,7 +51,7 @@ data:
             description: Media Server
             widget:
               type: jellyfin
-              url: http://100.67.54.105:30007
+              url: http://jellyfin:8096
               key: 2727b02a3f414e0b95b9401cbaaa5c02
         - Sonarr:
             icon: sonarr.png
