@@ -193,6 +193,7 @@ data:
 
       # 2. Jellyfin Database & Language Defaults
       if [ -f "/jellyfin-config/data/jellyfin.db" ]; then
+        echo "Ensuring Jellyfin API key exists in DB..."
         sqlite3 /jellyfin-config/data/jellyfin.db "INSERT OR IGNORE INTO ApiKeys (DateCreated, DateLastActivity, Name, AccessToken) VALUES ('2026-05-02 00:00:00', '2026-05-02 00:00:00', 'SecondSync-Auto', '$J_TOKEN');"
       fi
 

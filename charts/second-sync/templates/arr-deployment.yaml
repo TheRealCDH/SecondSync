@@ -114,8 +114,6 @@ spec:
           mountPath: /media
         - name: media
           mountPath: /downloads
-        - name: media
-          mountPath: /downloads/tv
 
       - name: radarr
         image: {{ .Values.images.radarr }}
@@ -140,8 +138,6 @@ spec:
           mountPath: /media
         - name: media
           mountPath: /downloads
-        - name: media
-          mountPath: /downloads/movies
 
       - name: prowlarr
         image: {{ .Values.images.prowlarr }}
@@ -187,8 +183,6 @@ spec:
           mountPath: /media
         - name: media
           mountPath: /downloads
-        - name: media
-          mountPath: /downloads/movies
 
       - name: overseerr
         image: {{ .Values.images.overseerr }}
