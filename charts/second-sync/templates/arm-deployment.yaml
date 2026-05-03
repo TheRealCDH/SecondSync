@@ -107,6 +107,9 @@ spec:
             echo "Starting ARM Insertion Listener..."
             # Fix git safe directory issue
             git config --global --add safe.directory /opt/arm
+            # Apply same main.py patches as the arm container
+            sed -i 's/job_length\.seconds/getattr(job_length, "seconds", 0)/g' /opt/arm/arm/ripper/main.py
+            sed -i 's/job_length\.days/getattr(job_length, "days", 0)/g' /opt/arm/arm/ripper/main.py
             LAST_DISC=""
             rm -f /tmp/arm-ripping
             while true; do
