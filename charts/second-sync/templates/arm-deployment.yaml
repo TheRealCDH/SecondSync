@@ -108,27 +108,29 @@ spec:
             # Fix git safe directory issue
             git config --global --add safe.directory /opt/arm
             LAST_DISC=""
+            rm -f /tmp/arm-ripping
             while true; do
               if [ -b /dev/sr0 ]; then
                 # Check for disc presence using blkid
                 DISC_ID=$(blkid -o value -s UUID /dev/sr0 || blkid -o value -s LABEL /dev/sr0 || echo "")
                 if [ ! -z "$DISC_ID" ]; then
                     if [ "$DISC_ID" != "$LAST_DISC" ]; then
-                        # Robust check: Is ARM already running?
-                        if pgrep -f "python3 /opt/arm/arm/ripper/main.py" > /dev/null; then
+                        # Check lockfile instead of pgrep (pgrep -f matched shell script's own cmdline)
+                        if [ -f /tmp/arm-ripping ]; then
                             echo "Disc detected but ARM is already running. Skipping trigger."
                         else
                             echo "New disc detected (ID: $DISC_ID)! Triggering ARM..."
                             LAST_DISC="$DISC_ID"
-                            # Run synchronously to prevent loop from re-triggering while drive is busy
+                            touch /tmp/arm-ripping
                             su - arm -c "python3 /opt/arm/arm/ripper/main.py -d sr0"
+                            rm -f /tmp/arm-ripping
                             echo "ARM job finished. Waiting for drive to settle..."
                             sleep 30
                         fi
                     fi
                 elif [ "$LAST_DISC" != "" ]; then
-                    # Verify removal - sometimes blkid fails if drive is busy
-                    if ! pgrep -f "python3 /opt/arm/arm/ripper/main.py" > /dev/null; then
+                    # Verify removal - only clear when no rip is running
+                    if [ ! -f /tmp/arm-ripping ]; then
                         echo "Disc removed."
                         LAST_DISC=""
                     fi
