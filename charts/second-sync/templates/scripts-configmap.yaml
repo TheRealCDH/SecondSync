@@ -82,6 +82,11 @@ data:
       sleep 10
     done
     python3 -m pip install requests --quiet 2>/dev/null || true
+    # Re-exec to pick up newly-installed bins (busybox sh caches command lookups)
+    if [ -z "$LINKER_SECOND_PASS" ]; then
+      export LINKER_SECOND_PASS=1
+      exec /bin/sh "$0"
+    fi
     
     API_KEY=$(cat /run/shared/api_key)
     PASSWORD=${TR_PASS:-admin}
