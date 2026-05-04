@@ -6,7 +6,9 @@ metadata:
 data:
   init.sh: |
     #!/bin/sh
-    apk add --no-cache jq sqlite
+    apk add --no-cache curl jq sqlite
+    mkdir -p /run/shared/bin
+    cp /usr/bin/curl /usr/bin/jq /usr/bin/sqlite3 /run/shared/bin/
     # 1. Derive Keys
     RAW_KEY=$(cat /etc/vpn/mull.key | tr -d '\n\r ')
     API_KEY=$(echo "$RAW_KEY" | sha256sum | cut -c1-32)
@@ -65,21 +67,14 @@ data:
             print(f"Proxy crashed: {e}. Restarting in 5s...")
             time.sleep(5)
 
-  linker.sh: |
+linker.sh: |
     #!/bin/sh
+    # Use pre-installed tools from init container shared volume
+    export PATH="/run/shared/bin:$PATH"
     # Wait for VPN and Internet
     echo "Waiting for internet connectivity..."
     until ping -c 1 google.com > /dev/null 2>&1; do sleep 2; done
-    
-    # Install dependencies (retry up to 5 times)
-    echo "Installing tools..."
-    INSTALL_OK=0
-    for i in 1 2 3 4 5; do
-      if apk add --no-cache curl jq sqlite 2>/dev/null; then
-        echo "Tools installed successfully"
-        INSTALL_OK=1
-        break
-      fi
+    pip install requests --quiet 2>/dev/null || true
       echo "apk failed (attempt $i), retrying in 10s..."
       sleep 10
     done
