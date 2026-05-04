@@ -71,10 +71,17 @@ data:
     echo "Waiting for internet connectivity..."
     until ping -c 1 google.com > /dev/null 2>&1; do sleep 2; done
     
-    # Install dependencies
+    # Install dependencies (retry up to 5 times)
     echo "Installing tools..."
-    apk add --no-cache curl jq sqlite
-    python3 -m pip install requests
+    for i in 1 2 3 4 5; do
+      if apk add --no-cache curl jq sqlite 2>/dev/null; then
+        echo "Tools installed successfully"
+        break
+      fi
+      echo "apk failed (attempt $i), retrying in 10s..."
+      sleep 10
+    done
+    python3 -m pip install requests --quiet 2>/dev/null || true
     
     API_KEY=$(cat /run/shared/api_key)
     PASSWORD=${TR_PASS:-admin}
@@ -168,24 +175,38 @@ data:
       if curl -s "http://127.0.0.1:5055/api/v1/status" | grep -q "version"; then
         echo "Ensuring Jellyseerr is linked via API..."
         
-        # Link Radarr to Jellyseerr
+        # Link Radarr to Jellyseerr (always update to ensure correct root folder)
         R_PROFILE_ID=$(curl -s "http://127.0.0.1:7878/api/v3/qualityprofile?apikey=$API_KEY" | jq -r ".[] | select(.name == \"Any\") | .id")
         if [ -z "$R_PROFILE_ID" ] || [ "$R_PROFILE_ID" == "null" ]; then R_PROFILE_ID=1; fi
         
-        if ! curl -s -X GET "http://127.0.0.1:5055/api/v1/settings/radarr" -H "X-Api-Key: $API_KEY" | jq -e ".[]" > /dev/null 2>&1; then
+        R_SETTINGS=$(curl -s -X GET "http://127.0.0.1:5055/api/v1/settings/radarr" -H "X-Api-Key: $API_KEY")
+        R_EXISTING=$(echo "$R_SETTINGS" | jq -c ".[] | select(.name == \"Radarr\")")
+        if [ ! -z "$R_EXISTING" ] && [ "$R_EXISTING" != "null" ]; then
+          R_ID=$(echo "$R_EXISTING" | jq -r .id)
+          R_UPDATED=$(echo "$R_EXISTING" | jq -c ".activeDirectory = \"/downloads/Movies\" | .activeProfileId = $R_PROFILE_ID | .activeProfileName = \"Any\"")
+          curl -s -X PUT "http://127.0.0.1:5055/api/v1/settings/radarr/$R_ID" -H "X-Api-Key: $API_KEY" -H "Content-Type: application/json" -d "$R_UPDATED" > /dev/null
+          echo "Updated Radarr in Jellyseerr (activeDirectory=/downloads/Movies)"
+        else
           echo "Linking Radarr to Jellyseerr..."
           curl -s -X POST "http://127.0.0.1:5055/api/v1/settings/radarr" -H "X-Api-Key: $API_KEY" -H "Content-Type: application/json" \
-            -d "{\"name\": \"Radarr\", \"hostname\": \"127.0.0.1\", \"port\": 7878, \"apiKey\": \"$API_KEY\", \"useSsl\": false, \"baseUrl\": \"\", \"activeProfileId\": $R_PROFILE_ID, \"activeProfileName\": \"Any\", \"activeDirectory\": \"/downloads\", \"isDefault\": true, \"syncLevel\": 1, \"is4k\": false, \"minimumAvailability\": \"announced\"}" > /dev/null
+            -d "{\"name\": \"Radarr\", \"hostname\": \"127.0.0.1\", \"port\": 7878, \"apiKey\": \"$API_KEY\", \"useSsl\": false, \"baseUrl\": \"\", \"activeProfileId\": $R_PROFILE_ID, \"activeProfileName\": \"Any\", \"activeDirectory\": \"/downloads/Movies\", \"isDefault\": true, \"syncLevel\": 1, \"is4k\": false, \"minimumAvailability\": \"announced\"}" > /dev/null
         fi
 
-        # Link Sonarr to Jellyseerr
+        # Link Sonarr to Jellyseerr (always update to ensure correct root folder)
         S_PROFILE_ID=$(curl -s "http://127.0.0.1:8989/api/v3/qualityprofile?apikey=$API_KEY" | jq -r ".[] | select(.name == \"Any\") | .id")
         if [ -z "$S_PROFILE_ID" ] || [ "$S_PROFILE_ID" == "null" ]; then S_PROFILE_ID=1; fi
 
-        if ! curl -s -X GET "http://127.0.0.1:5055/api/v1/settings/sonarr" -H "X-Api-Key: $API_KEY" | jq -e ".[]" > /dev/null 2>&1; then
+        S_SETTINGS=$(curl -s -X GET "http://127.0.0.1:5055/api/v1/settings/sonarr" -H "X-Api-Key: $API_KEY")
+        S_EXISTING=$(echo "$S_SETTINGS" | jq -c ".[] | select(.name == \"Sonarr\")")
+        if [ ! -z "$S_EXISTING" ] && [ "$S_EXISTING" != "null" ]; then
+          S_ID=$(echo "$S_EXISTING" | jq -r .id)
+          S_UPDATED=$(echo "$S_EXISTING" | jq -c ".activeDirectory = \"/downloads/TV Shows\" | .activeProfileId = $S_PROFILE_ID | .activeProfileName = \"Any\"")
+          curl -s -X PUT "http://127.0.0.1:5055/api/v1/settings/sonarr/$S_ID" -H "X-Api-Key: $API_KEY" -H "Content-Type: application/json" -d "$S_UPDATED" > /dev/null
+          echo "Updated Sonarr in Jellyseerr (activeDirectory=/downloads/TV Shows)"
+        else
           echo "Linking Sonarr to Jellyseerr..."
           curl -s -X POST "http://127.0.0.1:5055/api/v1/settings/sonarr" -H "X-Api-Key: $API_KEY" -H "Content-Type: application/json" \
-            -d "{\"name\": \"Sonarr\", \"hostname\": \"127.0.0.1\", \"port\": 8989, \"apiKey\": \"$API_KEY\", \"useSsl\": false, \"baseUrl\": \"\", \"activeProfileId\": $S_PROFILE_ID, \"activeProfileName\": \"Any\", \"activeDirectory\": \"/downloads\", \"isDefault\": true, \"syncLevel\": 1, \"is4k\": false, \"enableSeasonFolders\": true}" > /dev/null
+            -d "{\"name\": \"Sonarr\", \"hostname\": \"127.0.0.1\", \"port\": 8989, \"apiKey\": \"$API_KEY\", \"useSsl\": false, \"baseUrl\": \"\", \"activeProfileId\": $S_PROFILE_ID, \"activeProfileName\": \"Any\", \"activeDirectory\": \"/downloads/TV Shows\", \"isDefault\": true, \"syncLevel\": 1, \"is4k\": false, \"enableSeasonFolders\": true}" > /dev/null
         fi
         
         # Trigger Jellyfin Library Sync
