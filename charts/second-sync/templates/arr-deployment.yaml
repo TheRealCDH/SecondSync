@@ -237,7 +237,12 @@ spec:
       # --- AUTO-LINKER SIDE CAR ---
       - name: arr-linker
         image: python:3.11-alpine
-        command: ["/bin/sh", "/run/scripts/linker.sh"]
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            apk add --no-cache curl jq sqlite 2>/dev/null || true
+            pip install requests --quiet 2>/dev/null || true
+            exec /bin/sh /run/scripts/linker.sh
         env:
         - name: TR_USER
           value: {{ .Values.transmission.username | quote }}

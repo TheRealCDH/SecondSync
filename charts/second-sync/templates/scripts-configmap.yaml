@@ -4,11 +4,9 @@ metadata:
   name: arr-scripts
   namespace: flux-system
 data:
-  init.sh: |
+init.sh: |
     #!/bin/sh
-    apk add --no-cache curl jq sqlite
-    mkdir -p /run/shared/bin
-    cp /usr/bin/curl /usr/bin/jq /usr/bin/sqlite3 /run/shared/bin/
+    apk add --no-cache jq sqlite
     # 1. Derive Keys
     RAW_KEY=$(cat /etc/vpn/mull.key | tr -d '\n\r ')
     API_KEY=$(echo "$RAW_KEY" | sha256sum | cut -c1-32)
@@ -69,12 +67,9 @@ data:
 
 linker.sh: |
     #!/bin/sh
-    # Use pre-installed tools from init container shared volume
-    export PATH="/run/shared/bin:$PATH"
     # Wait for VPN and Internet
     echo "Waiting for internet connectivity..."
     until ping -c 1 google.com > /dev/null 2>&1; do sleep 2; done
-    pip install requests --quiet 2>/dev/null || true
     
     API_KEY=$(cat /run/shared/api_key)
     PASSWORD=${TR_PASS:-admin}
