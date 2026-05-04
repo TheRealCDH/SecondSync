@@ -18,6 +18,21 @@ spec:
         kubernetes.io/hostname: {{ .Values.nodeName }}
       runtimeClassName: nvidia
       initContainers:
+      - name: wait-for-nvidia
+        image: nvidia/cuda:12.6.3-base-ubuntu24.04
+        command: ["/bin/bash", "-c"]
+        args:
+          - |
+            echo "Waiting for nvidia-device-plugin to be ready..."
+            for i in $(seq 1 60); do
+              if nvidia-smi > /dev/null 2>&1; then
+                echo "GPU ready after ${i}s"
+                exit 0
+              fi
+              sleep 1
+            done
+            echo "GPU not ready after 60s" >&2
+            exit 1
       - name: jellyfin-patch
         image: alpine
         command: ["/bin/sh", "-c"]
