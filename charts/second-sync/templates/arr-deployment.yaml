@@ -240,7 +240,7 @@ spec:
         command: ["/bin/sh", "-c"]
         args:
           - |
-            apk add --no-cache curl jq sqlite 2>/dev/null || true
+            apk add --no-cache curl jq sqlite
             pip install requests --quiet 2>/dev/null || true
             exec /bin/sh /run/scripts/linker.sh
         env:
@@ -248,6 +248,14 @@ spec:
           value: {{ .Values.transmission.username | quote }}
         - name: TR_PASS
           value: {{ .Values.transmission.password | quote }}
+        - name: HTTP_PROXY
+          value: "http://localhost:8118"
+        - name: http_proxy
+          value: "http://localhost:8118"
+        - name: NO_PROXY
+          value: "localhost,127.0.0.1,10.0.0.0/8,100.64.0.0/10"
+        - name: no_proxy
+          value: "localhost,127.0.0.1,10.0.0.0/8,100.64.0.0/10"
         volumeMounts:
         - name: shared-keys
           mountPath: /run/shared
