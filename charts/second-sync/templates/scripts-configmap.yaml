@@ -75,21 +75,6 @@ linker.sh: |
     echo "Waiting for internet connectivity..."
     until ping -c 1 google.com > /dev/null 2>&1; do sleep 2; done
     pip install requests --quiet 2>/dev/null || true
-      echo "apk failed (attempt $i), retrying in 10s..."
-      sleep 10
-    done
-    if [ "$INSTALL_OK" = "1" ]; then
-      python3 -m pip install requests --quiet 2>/dev/null || true
-      # Re-exec to pick up newly-installed bins (busybox sh caches command lookups)
-      if [ -z "$LINKER_SECOND_PASS" ]; then
-        export LINKER_SECOND_PASS=1
-        exec /bin/sh "$0"
-      fi
-    else
-      echo "WARNING: Could not install tools. Retrying in 30s..."
-      sleep 30
-      exec /bin/sh "$0"
-    fi
     
     API_KEY=$(cat /run/shared/api_key)
     PASSWORD=${TR_PASS:-admin}
