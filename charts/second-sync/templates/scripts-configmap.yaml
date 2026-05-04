@@ -128,11 +128,13 @@ data:
       fi
     done
 
-    # 3. Add Root Folder /downloads
-    for PORT in 7878 8989; do
-      if ! curl -s "http://127.0.0.1:$PORT/api/v3/rootfolder?apikey=$API_KEY" | jq -e ".[] | select(.path == \"/downloads\")" > /dev/null 2>&1; then
-        echo "Adding Root Folder /downloads to app on port $PORT..."
-        curl -s -X POST "http://127.0.0.1:$PORT/api/v3/rootfolder?apikey=$API_KEY" -H "Content-Type: application/json" -d "{\"path\": \"/downloads\"}" > /dev/null
+    # 3. Add Root Folders (Radarr=Movies, Sonarr=TV)
+    for APP in "7878:/downloads/Movies" "8989:/downloads/TV Shows"; do
+      PORT=$(echo $APP | cut -d: -f1)
+      PATH=$(echo $APP | cut -d: -f2)
+      if ! curl -s "http://127.0.0.1:$PORT/api/v3/rootfolder?apikey=$API_KEY" | jq -e ".[] | select(.path == \"$PATH\")" > /dev/null 2>&1; then
+        echo "Adding Root Folder $PATH to app on port $PORT..."
+        curl -s -X POST "http://127.0.0.1:$PORT/api/v3/rootfolder?apikey=$API_KEY" -H "Content-Type: application/json" -d "{\"path\": \"$PATH\"}" > /dev/null
       fi
     done
 
