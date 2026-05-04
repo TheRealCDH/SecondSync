@@ -73,18 +73,26 @@ data:
     
     # Install dependencies (retry up to 5 times)
     echo "Installing tools..."
+    INSTALL_OK=0
     for i in 1 2 3 4 5; do
       if apk add --no-cache curl jq sqlite 2>/dev/null; then
         echo "Tools installed successfully"
+        INSTALL_OK=1
         break
       fi
       echo "apk failed (attempt $i), retrying in 10s..."
       sleep 10
     done
-    python3 -m pip install requests --quiet 2>/dev/null || true
-    # Re-exec to pick up newly-installed bins (busybox sh caches command lookups)
-    if [ -z "$LINKER_SECOND_PASS" ]; then
-      export LINKER_SECOND_PASS=1
+    if [ "$INSTALL_OK" = "1" ]; then
+      python3 -m pip install requests --quiet 2>/dev/null || true
+      # Re-exec to pick up newly-installed bins (busybox sh caches command lookups)
+      if [ -z "$LINKER_SECOND_PASS" ]; then
+        export LINKER_SECOND_PASS=1
+        exec /bin/sh "$0"
+      fi
+    else
+      echo "WARNING: Could not install tools. Retrying in 30s..."
+      sleep 30
       exec /bin/sh "$0"
     fi
     
