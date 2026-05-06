@@ -4,7 +4,7 @@ metadata:
   name: arr-scripts
   namespace: flux-system
 data:
-init.sh: |
+  init.sh: |
     #!/bin/sh
     apk add --no-cache jq sqlite
     # 1. Derive Keys
@@ -65,7 +65,7 @@ init.sh: |
             print(f"Proxy crashed: {e}. Restarting in 5s...")
             time.sleep(5)
 
-linker.sh: |
+  linker.sh: |
     #!/bin/sh
     # Wait for VPN and Internet
     echo "Waiting for internet connectivity..."
