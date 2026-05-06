@@ -41,35 +41,42 @@ spec:
             sed -i 's/job_length.seconds/getattr(job_length, "seconds", 0)/g' /opt/arm/arm/ripper/main.py
             sed -i 's/job_length.days/getattr(job_length, "days", 0)/g' /opt/arm/arm/ripper/main.py
             
-            # Patch update_key.sh to use FlareSolverr sidecar
+            # Patch update_key.sh to use FlareSolverr sidecar with retry + fallback
             cat <<'EOF' > /opt/arm/scripts/update_key.sh
             #!/bin/bash
-            set -e
             MAKEMKV_DIR="/home/arm/.MakeMKV"
             mkdir -p "$MAKEMKV_DIR"
             SETTINGS_FILE="$MAKEMKV_DIR/settings.conf"
-            
-            echo "Requesting key via FlareSolverr..."
-            # Get the page via FlareSolverr API
-            RESPONSE=$(curl -s -X POST http://localhost:8191/v1 -H "Content-Type: application/json" -d '{"cmd": "request.get", "url": "https://forum.makemkv.com/forum/viewtopic.php?f=5&t=1053"}')
-            
-            # Extract key from HTML in JSON response
-            MAKEMKV_SERIAL=$(echo "$RESPONSE" | grep -oP 'T-[\w\d@]{66}' | head -n 1)
-            
-            if [ -z "$MAKEMKV_SERIAL" ]; then
-                echo "Failed to find key in FlareSolverr response."
-                exit 40
-            fi
-            
-            echo "Found key: $MAKEMKV_SERIAL"
+
+            # Retry FlareSolverr up to 3 times
+            for attempt in 1 2 3; do
+              echo "Requesting MakeMKV key via FlareSolverr (attempt $attempt)..."
+              RESPONSE=$(curl -s --connect-timeout 10 --max-time 90 -X POST http://localhost:8191/v1 \
+                -H "Content-Type: application/json" \
+                -d '{"cmd": "request.get", "url": "https://forum.makemkv.com/forum/viewtopic.php?f=5&t=1053", "maxTimeout": 60000}')
+              MAKEMKV_SERIAL=$(echo "$RESPONSE" | grep -oP 'T-[\w\d@]{66}' | head -n 1)
+              if [ -n "$MAKEMKV_SERIAL" ]; then
+                echo "Found key: $MAKEMKV_SERIAL"
+                if grep -q "app_Key" "$SETTINGS_FILE"; then
+                  sed -i "s|app_Key = \".*\"|app_Key = \"$MAKEMKV_SERIAL\"|" "$SETTINGS_FILE"
+                else
+                  echo "app_Key = \"$MAKEMKV_SERIAL\"" >> "$SETTINGS_FILE"
+                fi
+                echo 'app_EnableAutoKey="1"' >> "$SETTINGS_FILE" 2>/dev/null || true
+                sort -u -o "$SETTINGS_FILE" "$SETTINGS_FILE"
+                chown arm:arm "$SETTINGS_FILE"
+                exit 0
+              fi
+              sleep 5
+            done
+
+            # Fallback: use cached key if present
             if grep -q "app_Key" "$SETTINGS_FILE"; then
-                sed -i "s|app_Key = \".*\"|app_Key = \"$MAKEMKV_SERIAL\"|" "$SETTINGS_FILE"
-            else
-                echo "app_Key = \"$MAKEMKV_SERIAL\"" >> "$SETTINGS_FILE"
+              echo "WARNING: Could not fetch new key, using cached key."
+              exit 0
             fi
-            echo 'app_EnableAutoKey="1"' >> "$SETTINGS_FILE" 2>/dev/null || true
-            sort -u -o "$SETTINGS_FILE" "$SETTINGS_FILE"
-            chown arm:arm "$SETTINGS_FILE"
+            echo "ERROR: No cached key and failed to fetch new key."
+            exit 40
             EOF
             chmod +x /opt/arm/scripts/update_key.sh
 
