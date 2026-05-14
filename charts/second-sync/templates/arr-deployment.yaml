@@ -240,9 +240,10 @@ spec:
         command: ["/bin/sh", "-c"]
         args:
           - |
-            apk add --no-cache curl jq sqlite
+            apk add --no-cache curl jq sqlite bash
             pip install requests --quiet 2>/dev/null || true
-            exec /bin/sh /run/scripts/linker.sh
+            cat /run/scripts/linker.sh > /tmp/linker.sh
+            bash /tmp/linker.sh
         env:
         - name: TR_USER
           value: {{ .Values.transmission.username | quote }}
