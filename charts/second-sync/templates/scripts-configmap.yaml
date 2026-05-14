@@ -126,10 +126,10 @@ data:
     # 3. Add Root Folders (Radarr=Movies, Sonarr=TV)
     for APP in "7878:/downloads/Movies" "8989:/downloads/TV Shows"; do
       PORT=$(echo $APP | cut -d: -f1)
-      PATH=$(echo $APP | cut -d: -f2)
-      if ! curl -s "http://127.0.0.1:$PORT/api/v3/rootfolder?apikey=$API_KEY" | jq -e ".[] | select(.path == \"$PATH\")" > /dev/null 2>&1; then
-        echo "Adding Root Folder $PATH to app on port $PORT..."
-        curl -s -X POST "http://127.0.0.1:$PORT/api/v3/rootfolder?apikey=$API_KEY" -H "Content-Type: application/json" -d "{\"path\": \"$PATH\"}" > /dev/null
+      FPATH=$(echo $APP | cut -d: -f2)
+      if ! curl -s "http://127.0.0.1:$PORT/api/v3/rootfolder?apikey=$API_KEY" | jq -e ".[] | select(.path == \"$FPATH\")" > /dev/null 2>&1; then
+        echo "Adding Root Folder $FPATH to app on port $PORT..."
+        curl -s -X POST "http://127.0.0.1:$PORT/api/v3/rootfolder?apikey=$API_KEY" -H "Content-Type: application/json" -d "{\"path\": \"$FPATH\"}" > /dev/null
       fi
     done
 
