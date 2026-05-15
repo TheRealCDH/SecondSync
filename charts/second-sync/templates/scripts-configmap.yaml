@@ -123,6 +123,16 @@ data:
       fi
     done
 
+    # 2.5. Aggressive failed download handling (auto-redownload on fail)
+    for PORT in 7878 8989; do
+      echo "Configuring aggressive download failure handling on port $PORT..."
+      CONFIG=$(curl -s "http://127.0.0.1:$PORT/api/v3/config/downloadclient?apikey=$API_KEY")
+      if [ ! -z "$CONFIG" ] && echo "$CONFIG" | jq -e ".autoRedownloadFailed" > /dev/null 2>&1; then
+        curl -s -X PUT "http://127.0.0.1:$PORT/api/v3/config/downloadclient/1?apikey=$API_KEY" -H "Content-Type: application/json" \
+          -d "$(echo "$CONFIG" | jq -c ".autoRedownloadFailed = true | .removeFailedDownloads = true")" > /dev/null
+      fi
+    done
+
     # 3. Add Root Folders (Radarr=Movies, Sonarr=TV)
     for APP in "7878:/downloads/Movies" "8989:/downloads/TV Shows"; do
       PORT=$(echo $APP | cut -d: -f1)
@@ -262,6 +272,10 @@ data:
       
       # 5. Trigger a sync in Prowlarr
       curl -s -X POST "http://127.0.0.1:9696/api/v1/command?apikey=$API_KEY" -H "Content-Type: application/json" -d '{"name": "ApplicationIndexerSync"}' > /dev/null
+
+      # 6. Trigger failed download scan in Radarr/Sonarr
+      curl -s -X POST "http://127.0.0.1:7878/api/v3/command?apikey=$API_KEY" -H "Content-Type: application/json" -d '{"name": "CheckForFailedDownloads"}' > /dev/null
+      curl -s -X POST "http://127.0.0.1:8989/api/v3/command?apikey=$API_KEY" -H "Content-Type: application/json" -d '{"name": "CheckForFailedDownloads"}' > /dev/null
 
       sleep 300
     done
