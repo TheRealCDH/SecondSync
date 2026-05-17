@@ -19,7 +19,8 @@ spec:
       runtimeClassName: nvidia
       initContainers:
       - name: jellyfin-patch
-        image: alpine
+        image: {{ .Values.images.alpine }}
+        imagePullPolicy: IfNotPresent
         command: ["/bin/sh", "-c"]
         args:
           - |
@@ -41,17 +42,35 @@ spec:
         volumeMounts:
         - name: config-jellyfin
           mountPath: /config
+      terminationGracePeriodSeconds: 60
       containers:
       - name: jellyfin
         image: {{ .Values.images.jellyfin }}
+        imagePullPolicy: IfNotPresent
         env:
         - name: NVIDIA_VISIBLE_DEVICES
           value: "all"
         - name: NVIDIA_DRIVER_CAPABILITIES
           value: "all"
+        ports:
+        - name: http
+          containerPort: 8096
         resources:
           limits:
             nvidia.com/gpu: 1
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8096
+          periodSeconds: 10
+          failureThreshold: 30
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8096
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 5
         volumeMounts:
         - name: config-jellyfin
           mountPath: /config
