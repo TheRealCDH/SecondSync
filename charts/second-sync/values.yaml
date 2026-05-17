@@ -38,7 +38,7 @@ images:
   prowlarr: linuxserver/prowlarr:latest
   bazarr: linuxserver/bazarr:latest
   overseerr: fallenbagel/jellyseerr:latest
-  jellyfin: jellyfin/jellyfin:10.10.7
+  jellyfin: jellyfin/jellyfin:10.11.8
   alpine: alpine:3.20
   flaresolverr: ghcr.io/flaresolverr/flaresolverr:latest
   arm: automaticrippingmachine/automatic-ripping-machine:latest
