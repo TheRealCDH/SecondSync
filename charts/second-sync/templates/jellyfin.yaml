@@ -16,7 +16,6 @@ spec:
     spec:
       nodeSelector:
         kubernetes.io/hostname: {{ .Values.nodeName }}
-      runtimeClassName: nvidia
       initContainers:
       - name: jellyfin-patch
         image: {{ .Values.images.alpine }}
