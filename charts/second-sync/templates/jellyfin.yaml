@@ -46,12 +46,11 @@ spec:
       - name: jellyfin
         image: {{ .Values.images.jellyfin }}
         imagePullPolicy: IfNotPresent
-        # NVIDIA_VISIBLE_DEVICES / NVIDIA_DRIVER_CAPABILITIES are intentionally
-        # NOT set: with CDI mode in containerd + the NVIDIA device plugin,
-        # device exposure and driver capabilities are injected declaratively
-        # by the CDI spec written to /var/run/cdi at boot. Setting them here
-        # would only matter if we were using the legacy nvidia-container-runtime
-        # hook, which we removed in favor of CDI for boot reliability.
+        env:
+        - name: NVIDIA_VISIBLE_DEVICES
+          value: "all"
+        - name: NVIDIA_DRIVER_CAPABILITIES
+          value: "all"
         ports:
         - name: http
           containerPort: 8096
