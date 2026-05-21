@@ -236,7 +236,7 @@ data:
               INDEXER=$(echo "$INDEXERS" | jq -c ".[] | select(.id == $ID)")
               if ! echo "$INDEXER" | jq -e ".tags | contains([$TAG_ID])" > /dev/null 2>&1; then
                 echo "Applying flaresolverr tag to indexer $ID..."
-                curl -s -X PUT "http://127.0.0.1:9696/api/v1/indexer/$ID?apikey=$API_KEY" -H "Content-Type: application/json" -d "$(echo "$INDEXER" | jq -c ".tags = (.tags + [$TAG_ID] | unique)")" > /dev/null
+                curl -s -X PUT "http://127.0.0.1:9696/api/v1/indexer/$ID?apikey=$API_KEY&forceSave=true" -H "Content-Type: application/json" -d "$(echo "$INDEXER" | jq -c ".tags = (.tags + [$TAG_ID] | unique)")" > /dev/null
               fi
             done
         fi
