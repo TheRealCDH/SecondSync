@@ -38,7 +38,7 @@ data:
     #!/bin/sh
     # Wait for VPN and Internet
     echo "Waiting for internet connectivity..."
-    until ping -c 1 google.com > /dev/null 2>&1; do sleep 2; done
+    until curl -s --max-time 5 https://www.google.com -o /dev/null; do sleep 2; done
     
     API_KEY=$(cat /run/shared/api_key)
     PASSWORD=${TR_PASS:-admin}
