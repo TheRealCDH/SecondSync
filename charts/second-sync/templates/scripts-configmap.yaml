@@ -242,10 +242,19 @@ data:
         fi
       fi
       
-      # 5. Trigger a sync in Prowlarr
+      # 5. Reset indexer disabled state so newly-tagged indexers retry immediately
+      if [ -f "/prowlarr-config/prowlarr.db" ]; then
+        DISABLED=$(sqlite3 /prowlarr-config/prowlarr.db "SELECT COUNT(*) FROM IndexerStatus WHERE DisabledTill IS NOT NULL" 2>/dev/null)
+        if [ ! -z "$DISABLED" ] && [ "$DISABLED" -gt 0 ]; then
+          echo "Clearing disabled state for $DISABLED indexers in Prowlarr DB..."
+          sqlite3 /prowlarr-config/prowlarr.db "DELETE FROM IndexerStatus" 2>/dev/null || true
+        fi
+      fi
+
+      # 6. Trigger a sync in Prowlarr
       curl -s -X POST "http://127.0.0.1:9696/api/v1/command?apikey=$API_KEY" -H "Content-Type: application/json" -d '{"name": "ApplicationIndexerSync"}' > /dev/null
 
-      # 6. Trigger failed download scan in Radarr/Sonarr
+      # 7. Trigger failed download scan in Radarr/Sonarr
       curl -s -X POST "http://127.0.0.1:7878/api/v3/command?apikey=$API_KEY" -H "Content-Type: application/json" -d '{"name": "CheckForFailedDownloads"}' > /dev/null
       curl -s -X POST "http://127.0.0.1:8989/api/v3/command?apikey=$API_KEY" -H "Content-Type: application/json" -d '{"name": "CheckForFailedDownloads"}' > /dev/null
 

@@ -38,6 +38,11 @@ spec:
         command: ["/bin/sh", "-c"]
         args:
           - |
+            # Disable IPv6 in the pod netns. gluetun's DNS server returns AAAA
+            # records but pod has no IPv6 connectivity, causing musl-based
+            # arr-app resolvers (Prowlarr/Radarr/Sonarr) to fail.
+            sysctl -w net.ipv6.conf.all.disable_ipv6=1 >/dev/null 2>&1 || true
+            sysctl -w net.ipv6.conf.default.disable_ipv6=1 >/dev/null 2>&1 || true
             export WIREGUARD_PRIVATE_KEY=$(cat /etc/vpn/mull.key | tr -d '\n\r ')
             exec /gluetun-entrypoint
         securityContext:
@@ -274,6 +279,8 @@ spec:
           mountPath: /bazarr-config
         - name: config-jellyfin
           mountPath: /jellyfin-config
+        - name: config-prowlarr
+          mountPath: /prowlarr-config
         - name: config-arm
           mountPath: /arm-config
           subPath: config
