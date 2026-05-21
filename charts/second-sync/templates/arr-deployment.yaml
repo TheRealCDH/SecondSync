@@ -234,21 +234,26 @@ spec:
 
       # --- AUTO-LINKER SIDE CAR ---
       - name: arr-linker
-        image: python:3.11-alpine
-        command: ["/bin/sh", "-c"]
+        image: debian:bookworm-slim
+        command: ["/bin/bash", "-c"]
         args:
           - |
-            # Wait for gluetun's DNS+VPN to be ready before fetching packages
+            # Wait for gluetun's DNS+VPN to be ready before fetching packages.
+            # Note: we use a glibc-based image (debian) instead of alpine/musl
+            # because musl's resolver has issues parsing some of gluetun's DNS
+            # responses, causing getaddrinfo() to fail despite raw DNS working.
             echo "Waiting for DNS/VPN to come up..."
+            export DEBIAN_FRONTEND=noninteractive
             i=0
-            until apk add --no-cache curl jq sqlite bash >/dev/null 2>&1; do
+            until apt-get update >/dev/null 2>&1 && apt-get install -y --no-install-recommends curl jq sqlite3 ca-certificates procps >/dev/null 2>&1; do
               i=$((i+1))
               if [ $i -ge 60 ]; then
-                echo "apk add failed after 60 attempts, exiting"
+                echo "apt-get install failed after 60 attempts, exiting"
                 exit 1
               fi
               sleep 5
             done
+            # debian's sqlite3 binary is named sqlite3; linker.sh uses 'sqlite3'
             echo "Packages installed."
             cat /run/scripts/linker.sh > /tmp/linker.sh
             bash /tmp/linker.sh
