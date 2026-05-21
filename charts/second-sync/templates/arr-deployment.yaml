@@ -238,7 +238,18 @@ spec:
         command: ["/bin/sh", "-c"]
         args:
           - |
-            apk add --no-cache curl jq sqlite bash
+            # Wait for gluetun's DNS+VPN to be ready before fetching packages
+            echo "Waiting for DNS/VPN to come up..."
+            i=0
+            until apk add --no-cache curl jq sqlite bash >/dev/null 2>&1; do
+              i=$((i+1))
+              if [ $i -ge 60 ]; then
+                echo "apk add failed after 60 attempts, exiting"
+                exit 1
+              fi
+              sleep 5
+            done
+            echo "Packages installed."
             cat /run/scripts/linker.sh > /tmp/linker.sh
             bash /tmp/linker.sh
         env:
