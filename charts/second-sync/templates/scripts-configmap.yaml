@@ -35,10 +35,16 @@ data:
     chown -R 1000:1000 "$CONFIG_DIR"
 
   linker.sh: |
-    #!/bin/sh
+    #!/bin/bash
+    # Override curl to always include a timeout. Prevents the loop from
+    # hanging indefinitely on slow endpoints (e.g. Jellyseerr library sync).
+    CURL_BIN=$(command -v curl)
+    curl() { "$CURL_BIN" --connect-timeout 5 --max-time 30 "$@"; }
+    export -f curl
+
     # Wait for VPN and Internet
     echo "Waiting for internet connectivity..."
-    until curl -s --max-time 5 https://www.google.com -o /dev/null; do sleep 2; done
+    until curl -s https://www.google.com -o /dev/null; do sleep 2; done
     
     API_KEY=$(cat /run/shared/api_key)
     PASSWORD=${TR_PASS:-admin}
