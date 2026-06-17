@@ -24,7 +24,7 @@ data:
     
     # Robust settings.json with migration fields - Using INTERNAL jellyfin:8096
     echo "Writing fresh settings.json for Jellyseerr..."
-    printf '{"main":{"applicationTitle":"Jellyseerr","applicationUrl":"","mediaServerType":2,"localLogin":true,"mediaServerLogin":true,"newPlexLogin":true,"apiKey":"%s","locale":"en","originalLanguage":"","streamingRegion":"","discoverRegion":"","cacheImages":false,"defaultPermissions":32,"blacklistedTags":"","blacklistedTagsLimit":50,"hideBlacklisted":false,"hideAvailable":false,"partialRequestsEnabled":true,"enableSpecialEpisodes":false,"youtubeUrl":"","defaultQuotas":{"movie":{},"tv":{}}},"jellyfin":{"name":"Main","ip":"jellyfin","hostname":"jellyfin","port":8096,"useSsl":false,"apiKey":"2727b02a3f414e0b95b9401cbaaa5c02","serverId":"26da23e0782d488382b90388c48397bd","libraries":[]},"public":{"initialized":true},"network":{"forceIpv4First":false,"csrfProtection":false,"trustProxy":false,"proxy":{"enabled":false,"hostname":"","port":8080,"useSsl":false,"user":"","password":"","bypassLocalAddresses":true,"bypassFilter":""}},"notifications":{"agents":{}},"jobs":{},"radarr":[],"sonarr":[],"tautulli":{}}' "$API_KEY" > "$FILE"
+    printf '{"main":{"applicationTitle":"Jellyseerr","applicationUrl":"","mediaServerType":2,"localLogin":true,"mediaServerLogin":true,"newPlexLogin":true,"apiKey":"%s","locale":"en","originalLanguage":"en","streamingRegion":"US","discoverRegion":"US","cacheImages":false,"defaultPermissions":32,"blacklistedTags":"","blacklistedTagsLimit":50,"hideBlacklisted":false,"hideAvailable":false,"partialRequestsEnabled":true,"enableSpecialEpisodes":false,"youtubeUrl":"","defaultQuotas":{"movie":{},"tv":{}}},"jellyfin":{"name":"Main","ip":"jellyfin","hostname":"jellyfin","port":8096,"useSsl":false,"apiKey":"2727b02a3f414e0b95b9401cbaaa5c02","serverId":"26da23e0782d488382b90388c48397bd","libraries":[]},"public":{"initialized":true},"network":{"forceIpv4First":false,"csrfProtection":false,"trustProxy":false,"proxy":{"enabled":false,"hostname":"","port":8080,"useSsl":false,"user":"","password":"","bypassLocalAddresses":true,"bypassFilter":""}},"notifications":{"agents":{}},"jobs":{},"radarr":[],"sonarr":[],"tautulli":{}}' "$API_KEY" > "$FILE"
     
     # Ensure DB has the admin user
     echo "Ensuring Admin user is correctly configured in DB..."
@@ -149,6 +149,20 @@ data:
       # 1. Patch Jellyseerr Configuration via API
       if curl -s "http://127.0.0.1:5055/api/v1/status" | grep -q "version"; then
         echo "Ensuring Jellyseerr is linked via API..."
+
+        # Lock discovery to English + US (no foreign content in the menu).
+        # (settings.json template also sets these, so a restart keeps them.)
+        curl -s -X POST "http://127.0.0.1:5055/api/v1/settings/main" -H "X-Api-Key: $API_KEY" -H "Content-Type: application/json" \
+          -d '{"originalLanguage":"en","discoverRegion":"US","streamingRegion":"US"}' > /dev/null
+        # TMDB "Trending" ignores the language filter, so it leaks foreign
+        # titles -> disable that one discover slider (lives in the DB, not
+        # settings.json). Idempotent: only re-POST when it's still enabled.
+        J_SLIDERS=$(curl -s "http://127.0.0.1:5055/api/v1/settings/discover" -H "X-Api-Key: $API_KEY")
+        if echo "$J_SLIDERS" | jq -e '.[] | select(.type==4 and .enabled==true)' > /dev/null 2>&1; then
+          echo "Disabling Jellyseerr Trending slider (not language-filterable)..."
+          curl -s -X POST "http://127.0.0.1:5055/api/v1/settings/discover" -H "X-Api-Key: $API_KEY" -H "Content-Type: application/json" \
+            -d "$(echo "$J_SLIDERS" | jq -c '[.[] | if .type==4 then .enabled=false else . end]')" > /dev/null
+        fi
         
         # Link Radarr to Jellyseerr (always update to ensure correct root folder)
         R_PROFILE_ID=$(curl -s "http://127.0.0.1:7878/api/v3/qualityprofile?apikey=$API_KEY" | jq -r ".[] | select(.name == \"Any\") | .id")
