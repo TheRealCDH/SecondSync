@@ -88,6 +88,10 @@ data:
               url: http://127.0.0.1:9091
               username: {{ "{{" }}HOMEPAGE_VAR_TR_USER{{ "}}" }}
               password: {{ "{{" }}HOMEPAGE_VAR_TR_PASS{{ "}}" }}
+        - Cleanuparr:
+            icon: cleanuparr.png
+            href: http://{{ .Values.tailscaleIP }}:30011
+            description: Stalled-Download Cleanup
         - ARM:
             icon: https://raw.githubusercontent.com/automatic-ripping-machine/automatic-ripping-machine/main/arm/static/img/arm-logo.png
             href: http://{{ .Values.tailscaleIP }}:30008

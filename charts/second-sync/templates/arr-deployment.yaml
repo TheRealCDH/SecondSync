@@ -67,7 +67,7 @@ spec:
         - name: FIREWALL_OUTBOUND_SUBNETS
           value: {{ .Values.vpn.localSubnets | quote }}
         - name: FIREWALL_INPUT_PORTS
-          value: "5055,8989,7878,9091,51413,9696,6767,8080"
+          value: "5055,8989,7878,9091,51413,9696,6767,8080,11011"
         volumeMounts:
         - name: vpn-key
           mountPath: /etc/vpn/mull.key
@@ -213,6 +213,42 @@ spec:
           value: info
         - name: TZ
           value: UTC
+        resources:
+          requests:
+            cpu: 250m
+            memory: 768Mi
+          limits:
+            memory: 2Gi
+        volumeMounts:
+        # Headless Chrome keeps renderer/IPC data in /dev/shm. k8s defaults it
+        # to 64MB, which starves Chrome and makes Cloudflare challenges stall or
+        # crash -> the "Timeout after 60s -> 500" failures Prowlarr sees as
+        # Cloudflare rejects. This is the in-k8s equivalent of `--shm-size=1g`.
+        - name: flaresolverr-dshm
+          mountPath: /dev/shm
+
+      # --- STALLED-DOWNLOAD CLEANUP ---
+      # Watches the Sonarr/Radarr queues + Transmission for stalled / slow /
+      # metadata-stuck downloads (the "stuck at 20%, never finishes" case that
+      # the *arrs never flag as failed), removes + blocklists them, and triggers
+      # a re-search so the next release is grabbed. Shares the pod netns, so it
+      # reaches Sonarr/Radarr/Transmission over 127.0.0.1.
+      # NOTE: arr/download-client connections are configured once via the web UI
+      # (NodePort {{ .Values.ports.cleanuparr }}); the config persists in the PVC.
+      - name: cleanuparr
+        image: {{ .Values.images.cleanuparr }}
+        env:
+        - name: PORT
+          value: "11011"
+        - name: PUID
+          value: "1000"
+        - name: PGID
+          value: "1000"
+        - name: TZ
+          value: "UTC"
+        volumeMounts:
+        - name: config-cleanuparr
+          mountPath: /config
 
       - name: homepage
         image: {{ .Values.images.homepage }}
@@ -290,6 +326,12 @@ spec:
       volumes:
       - name: shared-keys
         emptyDir: {}
+      # Backing for FlareSolverr's /dev/shm (headless Chrome). RAM-backed,
+      # capped at 1Gi (counts against the flaresolverr container's mem limit).
+      - name: flaresolverr-dshm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 1Gi
       - name: arr-scripts
         configMap:
           name: arr-scripts
@@ -330,6 +372,9 @@ spec:
       - name: config-homepage
         persistentVolumeClaim:
           claimName: homepage-config-pvc
+      - name: config-cleanuparr
+        persistentVolumeClaim:
+          claimName: cleanuparr-config-pvc
       - name: homepage-config
         configMap:
           name: homepage-config

@@ -23,6 +23,7 @@ ports:
   transmissionPeer: 31413
   homepage: 30000
   headlamp: 30010
+  cleanuparr: 30011
 
 # Transmission Credentials
 transmission:
@@ -43,3 +44,4 @@ images:
   flaresolverr: ghcr.io/flaresolverr/flaresolverr:latest
   arm: automaticrippingmachine/automatic-ripping-machine:latest
   homepage: ghcr.io/gethomepage/homepage:latest
+  cleanuparr: ghcr.io/cleanuparr/cleanuparr:latest

@@ -120,12 +120,12 @@ data:
     if [ ! -z "$EXISTING_FS" ] && [ "$EXISTING_FS" != "null" ]; then
       ID=$(echo $EXISTING_FS | jq -r .id)
       echo "Updating FlareSolverr proxy..."
-      UPDATED=$(echo $EXISTING_FS | jq -c ".fields = [{\"name\": \"host\", \"value\": \"http://127.0.0.1:8191\"}, {\"name\": \"requestTimeout\", \"value\": 60}]")
+      UPDATED=$(echo $EXISTING_FS | jq -c ".fields = [{\"name\": \"host\", \"value\": \"http://127.0.0.1:8191\"}, {\"name\": \"requestTimeout\", \"value\": 120}]")
       curl -s -X PUT "http://127.0.0.1:9696/api/v1/indexerproxy/$ID?apikey=$API_KEY" -H "Content-Type: application/json" -d "$UPDATED" > /dev/null
     else
       echo "Adding FlareSolverr API to Prowlarr..."
       curl -s -X POST "http://127.0.0.1:9696/api/v1/indexerproxy?apikey=$API_KEY" -H "Content-Type: application/json" \
-        -d "{\"name\": \"FlareSolverr\", \"enabled\": true, \"implementation\": \"FlareSolverr\", \"configContract\": \"FlareSolverrSettings\", \"fields\": [{\"name\": \"host\", \"value\": \"http://127.0.0.1:8191\"}, {\"name\": \"requestTimeout\", \"value\": 60}]}" > /dev/null
+        -d "{\"name\": \"FlareSolverr\", \"enabled\": true, \"implementation\": \"FlareSolverr\", \"configContract\": \"FlareSolverrSettings\", \"fields\": [{\"name\": \"host\", \"value\": \"http://127.0.0.1:8191\"}, {\"name\": \"requestTimeout\", \"value\": 120}]}" > /dev/null
     fi
 
     # 5. Cleanup: remove deprecated FlareSolverr-Global HTTP proxy entry if present

@@ -87,6 +87,20 @@ spec:
     targetPort: 6767
     nodePort: {{ .Values.ports.bazarr }}
 ---
+# Cleanuparr
+apiVersion: v1
+kind: Service
+metadata:
+  name: cleanuparr
+spec:
+  type: NodePort
+  selector:
+    app: arr-stack
+  ports:
+  - port: 11011
+    targetPort: 11011
+    nodePort: {{ .Values.ports.cleanuparr }}
+---
 # Jellyfin
 apiVersion: v1
 kind: Service
