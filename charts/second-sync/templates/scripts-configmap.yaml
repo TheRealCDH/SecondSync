@@ -247,6 +247,23 @@ data:
         fi
       fi
       
+      # 4b. Bake indexer priority: boost the best English public indexers.
+      #     Lower number = higher priority; Prowlarr propagates this to
+      #     Sonarr/Radarr as a tie-breaker between equal-scored releases.
+      PREFERRED_IXR="1337x|The Pirate Bay|TorrentDownload|Torrent Downloads|LimeTorrents|EZTV|Knaben|YTS"
+      IXR_LIST=$(curl -s "http://127.0.0.1:9696/api/v1/indexer?apikey=$API_KEY")
+      if [ ! -z "$IXR_LIST" ] && [ "$IXR_LIST" != "[]" ]; then
+        for IXID in $(echo "$IXR_LIST" | jq -r '.[].id'); do
+          IXOBJ=$(echo "$IXR_LIST" | jq -c ".[] | select(.id == $IXID)")
+          IXNAME=$(echo "$IXOBJ" | jq -r '.name')
+          IXPRIO=$(echo "$IXOBJ" | jq -r '.priority')
+          if echo "$IXNAME" | grep -qiE "^($PREFERRED_IXR)$" && [ "$IXPRIO" != "1" ]; then
+            echo "Boosting indexer priority for $IXNAME..."
+            curl -s -X PUT "http://127.0.0.1:9696/api/v1/indexer/$IXID?apikey=$API_KEY&forceSave=true" -H "Content-Type: application/json" -d "$(echo "$IXOBJ" | jq -c '.priority=1')" > /dev/null
+          fi
+        done
+      fi
+
       # 5. Reset indexer disabled state so newly-tagged indexers retry immediately
       if [ -f "/prowlarr-config/prowlarr.db" ]; then
         DISABLED=$(sqlite3 /prowlarr-config/prowlarr.db "SELECT COUNT(*) FROM IndexerStatus WHERE DisabledTill IS NOT NULL" 2>/dev/null)
@@ -328,6 +345,31 @@ data:
           echo "Cleanuparr: API key not available yet, will retry next loop."
         fi
       fi
+
+      # 9. Language preference: prefer English, allow fallback (Sonarr/Radarr).
+      #    A "Prefer English" custom format scored +50 in every quality profile:
+      #    English releases win head-to-head, while a foreign-only release
+      #    (score 0) still clears minFormatScore and can be grabbed as fallback.
+      for LPORT in 8989 7878; do
+        CF_ID=$(curl -s "http://127.0.0.1:$LPORT/api/v3/customformat?apikey=$API_KEY" | jq -r '.[] | select(.name=="Prefer English") | .id')
+        if [ -z "$CF_ID" ] || [ "$CF_ID" = "null" ]; then
+          echo "Creating 'Prefer English' custom format on port $LPORT..."
+          CF_ID=$(curl -s -X POST "http://127.0.0.1:$LPORT/api/v3/customformat?apikey=$API_KEY" -H "Content-Type: application/json" \
+            -d '{"name":"Prefer English","includeCustomFormatWhenRenaming":false,"specifications":[{"name":"English","implementation":"LanguageSpecification","negate":false,"required":true,"fields":[{"name":"value","value":1}]}]}' | jq -r '.id')
+        fi
+        if [ ! -z "$CF_ID" ] && [ "$CF_ID" != "null" ]; then
+          PROFILES=$(curl -s "http://127.0.0.1:$LPORT/api/v3/qualityprofile?apikey=$API_KEY")
+          for PID in $(echo "$PROFILES" | jq -r '.[].id'); do
+            PROF=$(echo "$PROFILES" | jq -c ".[] | select(.id == $PID)")
+            CURSCORE=$(echo "$PROF" | jq -r --argjson cf "$CF_ID" '(.formatItems[] | select(.format==$cf) | .score) // "none"')
+            if [ "$CURSCORE" != "50" ]; then
+              NEWPROF=$(echo "$PROF" | jq -c --argjson cf "$CF_ID" 'if any(.formatItems[]; .format==$cf) then (.formatItems |= map(if .format==$cf then .score=50 else . end)) else .formatItems += [{format:$cf, name:"Prefer English", score:50}] end')
+              curl -s -X PUT "http://127.0.0.1:$LPORT/api/v3/qualityprofile/$PID?apikey=$API_KEY" -H "Content-Type: application/json" -d "$NEWPROF" > /dev/null
+              echo "Set 'Prefer English'=50 in profile $PID on port $LPORT"
+            fi
+          done
+        fi
+      done
 
       sleep 300
     done
