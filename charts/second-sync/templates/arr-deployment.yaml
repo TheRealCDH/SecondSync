@@ -12,6 +12,10 @@ spec:
     metadata:
       labels:
         app: arr-stack
+      annotations:
+        # Roll the pod whenever the linker/init scripts change, so a running
+        # arr-linker (which reads linker.sh once at startup) picks up edits.
+        checksum/scripts: {{ include (print $.Template.BasePath "/scripts-configmap.yaml") . | sha256sum }}
     spec:
       nodeSelector:
         kubernetes.io/hostname: ripnix

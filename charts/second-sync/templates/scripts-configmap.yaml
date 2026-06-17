@@ -49,6 +49,9 @@ data:
     API_KEY=$(cat /run/shared/api_key)
     PASSWORD=${TR_PASS:-admin}
     USER=${TR_USER:-admin}
+    # Cleanuparr account creds: derived (stable across restarts), >=8 chars.
+    CL_USER="root"
+    CL_PASS=$(cat /run/shared/password 2>/dev/null)
 
     # Wait for services
     echo "Waiting for stack to wake up..."
@@ -136,6 +139,8 @@ data:
     fi
 
     J_TOKEN="2727b02a3f414e0b95b9401cbaaa5c02"
+    # Cached Cleanuparr API key (re-fetched on restart / if auth lapses).
+    CL_APIKEY=""
 
     echo "Automation complete. Entering loop..."
     while true; do
@@ -257,6 +262,72 @@ data:
       # 7. Trigger failed download scan in Radarr/Sonarr
       curl -s -X POST "http://127.0.0.1:7878/api/v3/command?apikey=$API_KEY" -H "Content-Type: application/json" -d '{"name": "CheckForFailedDownloads"}' > /dev/null
       curl -s -X POST "http://127.0.0.1:8989/api/v3/command?apikey=$API_KEY" -H "Content-Type: application/json" -d '{"name": "CheckForFailedDownloads"}' > /dev/null
+
+      # 8. Cleanuparr headless setup + wiring.
+      # Cleanuparr v2 has no env/file seeding, but its backend exposes the same
+      # setup/auth/config REST API its web UI uses, so we drive that the way we
+      # auto-wire the *arr apps. All steps are idempotent.
+      CL="http://127.0.0.1:11011"
+      if [ -n "$CL_PASS" ] && curl -sf "$CL/health" > /dev/null 2>&1; then
+        # 8a. First-run setup (creates the admin user; guarded by status)
+        CL_STATUS=$(curl -s "$CL/api/auth/status")
+        if [ "$(echo "$CL_STATUS" | jq -r '.setupCompleted // false')" != "true" ]; then
+          echo "Cleanuparr: running first-run setup..."
+          curl -s -X POST "$CL/api/auth/setup/account" -H "Content-Type: application/json" \
+            -d "$(jq -nc --arg u "$CL_USER" --arg p "$CL_PASS" '{username:$u,password:$p}')" > /dev/null
+          curl -s -X POST "$CL/api/auth/setup/complete" -H "Content-Type: application/json" > /dev/null
+          CL_APIKEY=""
+        fi
+        # 8b. Obtain an API key (login -> JWT -> api-key), cached across loops
+        if [ -z "$CL_APIKEY" ]; then
+          CL_TOKEN=$(curl -s -X POST "$CL/api/auth/login" -H "Content-Type: application/json" \
+            -d "$(jq -nc --arg u "$CL_USER" --arg p "$CL_PASS" '{username:$u,password:$p}')" \
+            | jq -r '.tokens.accessToken // .accessToken // empty')
+          if [ -n "$CL_TOKEN" ]; then
+            CL_APIKEY=$(curl -s -H "Authorization: Bearer $CL_TOKEN" "$CL/api/account/api-key" | jq -r '.apiKey // empty')
+          fi
+        fi
+        if [ -n "$CL_APIKEY" ]; then
+          AH="X-Api-Key: $CL_APIKEY"
+          # 8c. Sonarr + Radarr instances (version pulled from each app)
+          for APP in "sonarr:8989:Sonarr" "radarr:7878:Radarr"; do
+            AKIND=$(echo $APP | cut -d: -f1); APORT=$(echo $APP | cut -d: -f2); ANAME=$(echo $APP | cut -d: -f3)
+            if ! curl -s -H "$AH" "$CL/api/configuration/$AKIND" | grep -q "\"name\":\"$ANAME\""; then
+              AVER=$(curl -s "http://127.0.0.1:$APORT/api/v3/system/status?apikey=$API_KEY" | jq -r '.version // empty' | cut -d. -f1)
+              case "$AVER" in ''|*[!0-9]*) AVER=4 ;; esac
+              echo "Cleanuparr: adding $ANAME instance..."
+              curl -s -X POST "$CL/api/configuration/$AKIND/instances" -H "$AH" -H "Content-Type: application/json" \
+                -d "$(jq -nc --arg n "$ANAME" --arg u "http://127.0.0.1:$APORT" --arg k "$API_KEY" --argjson v "$AVER" '{name:$n,url:$u,apiKey:$k,version:$v,enabled:true}')" > /dev/null
+            fi
+          done
+          # 8d. Transmission download client (Host + urlBase as the UI builds it)
+          if ! curl -s -H "$AH" "$CL/api/configuration/download_client" | grep -q '"name":"Transmission"'; then
+            echo "Cleanuparr: adding Transmission download client..."
+            curl -s -X POST "$CL/api/configuration/download_client" -H "$AH" -H "Content-Type: application/json" \
+              -d "$(jq -nc --arg h "http://127.0.0.1:9091" --arg u "$USER" --arg p "$PASSWORD" '{enabled:true,name:"Transmission",type:"Torrent",typeName:"Transmission",host:$h,username:$u,password:$p,urlBase:"transmission"}')" > /dev/null
+          fi
+          # 8e. Stall rule (the "stuck at X%, never finishes" case) + Slow rule
+          if ! curl -s -H "$AH" "$CL/api/queue-rules/stall" | grep -q '"name":"Stalled"'; then
+            echo "Cleanuparr: adding stall rule..."
+            curl -s -X POST "$CL/api/queue-rules/stall" -H "$AH" -H "Content-Type: application/json" \
+              -d '{"name":"Stalled","enabled":true,"maxStrikes":3,"privacyType":"Public","minCompletionPercentage":0,"maxCompletionPercentage":100,"resetStrikesOnProgress":true}' > /dev/null
+          fi
+          if ! curl -s -H "$AH" "$CL/api/queue-rules/slow" | grep -q '"name":"Slow"'; then
+            echo "Cleanuparr: adding slow rule..."
+            curl -s -X POST "$CL/api/queue-rules/slow" -H "$AH" -H "Content-Type: application/json" \
+              -d '{"name":"Slow","enabled":true,"maxStrikes":3,"privacyType":"Public","minCompletionPercentage":0,"maxCompletionPercentage":100,"resetStrikesOnProgress":true,"minSpeed":"100KB","maxTimeHours":0,"ignoreAboveSize":""}' > /dev/null
+          fi
+          # 8f. Enable the Queue Cleaner job (GET -> flip enabled -> PUT)
+          QC=$(curl -s -H "$AH" "$CL/api/configuration/queue_cleaner")
+          if [ ! -z "$QC" ] && [ "$(echo "$QC" | jq -r '.enabled // false')" != "true" ]; then
+            echo "Cleanuparr: enabling Queue Cleaner job..."
+            QC_NEW=$(echo "$QC" | jq -c '.enabled=true | .downloadingMetadataMaxStrikes = (if ((.downloadingMetadataMaxStrikes // 0) >= 3) then .downloadingMetadataMaxStrikes else 3 end)')
+            curl -s -X PUT "$CL/api/configuration/queue_cleaner" -H "$AH" -H "Content-Type: application/json" -d "$QC_NEW" > /dev/null
+          fi
+        else
+          echo "Cleanuparr: API key not available yet, will retry next loop."
+        fi
+      fi
 
       sleep 300
     done
