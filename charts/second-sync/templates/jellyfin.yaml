@@ -16,6 +16,10 @@ spec:
     spec:
       nodeSelector:
         kubernetes.io/hostname: {{ .Values.nodeName }}
+      # renderD129 is mode 0666 today so this is belt-and-braces, but if a udev rule ever
+      # tightens it to 0660 root:render the pod would silently lose hardware transcoding.
+      securityContext:
+        supplementalGroups: [303, 26]   # render, video (GIDs on the ripnix host)
       initContainers:
       - name: jellyfin-patch
         image: {{ .Values.images.alpine }}
@@ -25,12 +29,21 @@ spec:
           - |
             FILE="/config/config/encoding.xml"
             if [ -f "$FILE" ]; then
-              echo "Patching Jellyfin hardware acceleration..."
-              sed -i "s|<HardwareAccelerationType>.*</HardwareAccelerationType>|<HardwareAccelerationType>nvenc</HardwareAccelerationType>|" "$FILE"
+              echo "Patching Jellyfin hardware acceleration (AMD VAAPI)..."
+              sed -i "s|<HardwareAccelerationType>.*</HardwareAccelerationType>|<HardwareAccelerationType>vaapi</HardwareAccelerationType>|" "$FILE"
               sed -i "s|<EnableTonemapping>.*</EnableTonemapping>|<EnableTonemapping>true</EnableTonemapping>|" "$FILE"
-              sed -i "s|<EnableVppTonemapping>.*</EnableVppTonemapping>|<EnableVppTonemapping>true</EnableVppTonemapping>|" "$FILE"
+              # VPP tonemapping is Intel QSV only — leaving it true on AMD breaks HDR transcodes.
+              sed -i "s|<EnableVppTonemapping>.*</EnableVppTonemapping>|<EnableVppTonemapping>false</EnableVppTonemapping>|" "$FILE"
               sed -i "s|<AllowHevcEncoding>.*</AllowHevcEncoding>|<AllowHevcEncoding>true</AllowHevcEncoding>|" "$FILE"
-              sed -i "s|<EnableEnhancedNvdecDecoder>.*</EnableEnhancedNvdecDecoder>|<EnableEnhancedNvdecDecoder>true</EnableEnhancedNvdecDecoder>|" "$FILE"
+              # NVDEC is NVIDIA-only; must be off now that decode happens on the AMD card.
+              sed -i "s|<EnableEnhancedNvdecDecoder>.*</EnableEnhancedNvdecDecoder>|<EnableEnhancedNvdecDecoder>false</EnableEnhancedNvdecDecoder>|" "$FILE"
+              # Pin the render node explicitly. renderD128 is the NVIDIA card on this host,
+              # so leaving this unset lets Jellyfin probe the wrong GPU and fail.
+              if ! grep -q "VaapiDevice" "$FILE"; then
+                sed -i "/<\/EncodingOptions>/i \  <VaapiDevice>/dev/dri/renderD129</VaapiDevice>" "$FILE"
+              else
+                sed -i "s|<VaapiDevice>.*</VaapiDevice>|<VaapiDevice>/dev/dri/renderD129</VaapiDevice>|" "$FILE"
+              fi
               # Add Hardware Scaling if missing, then set to true
               if ! grep -q "EnableHardwareScaling" "$FILE"; then
                 sed -i "/<\/EncodingOptions>/i \  <EnableHardwareScaling>true</EnableHardwareScaling>" "$FILE"
@@ -47,16 +60,17 @@ spec:
         image: {{ .Values.images.jellyfin }}
         imagePullPolicy: IfNotPresent
         env:
-        - name: NVIDIA_VISIBLE_DEVICES
-          value: "all"
-        - name: NVIDIA_DRIVER_CAPABILITIES
-          value: "all"
+        # REQUIRED on this host — do not remove. ripnix has two GPUs, and libva will
+        # otherwise load nvidia_drv_video.so for the VAAPI display and every encode dies
+        # with "No usable encoding entrypoint found for profile ...". Verified 2026-08-04:
+        # identical ffmpeg h264_vaapi/hevc_vaapi test encodes against renderD129 fail
+        # without this variable and succeed with it.
+        - name: LIBVA_DRIVER_NAME
+          value: "radeonsi"
         ports:
         - name: http
           containerPort: 8096
-        resources:
-          limits:
-            nvidia.com/gpu: 1
+        resources: {}
         startupProbe:
           httpGet:
             path: /health
@@ -78,6 +92,8 @@ spec:
         - name: media
           mountPath: /media
           readOnly: true
+        - name: dri
+          mountPath: /dev/dri
       volumes:
       - name: media
         persistentVolumeClaim:
@@ -87,3 +103,13 @@ spec:
           claimName: jellyfin-config-pvc
       - name: jellyfin-cache
         emptyDir: {}
+      # Transcoding moved from the 1070 Ti (nvidia.com/gpu device plugin) to the AMD
+      # RX 6650 XT on 2026-08-04, freeing the NVIDIA card for CUDA TTS/STT. The cards are
+      # codec-equivalent (both do H264 + HEVC incl. Main10, neither does AV1), so this is
+      # an allocation change, not an upgrade — ROCm does not support gfx1032, so the AMD
+      # cannot do the ML work and the NVIDIA therefore has to be the one freed.
+      # See /etc/nixos/amd-transcode.nix on ripnix.
+      - name: dri
+        hostPath:
+          path: /dev/dri
+          type: Directory
