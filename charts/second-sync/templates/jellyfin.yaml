@@ -70,7 +70,15 @@ spec:
         ports:
         - name: http
           containerPort: 8096
-        resources: {}
+        resources:
+          limits:
+            # Advertised by generic-device-plugin (declared in /etc/nixos/k3s.nix on ripnix),
+            # which maps to /dev/dri/renderD129. This request is what actually grants the
+            # container permission to open() the render node: the hostPath mount below only
+            # makes the device node visible, and without this the containerd device cgroup
+            # returns EPERM — surfacing as ffmpeg's misleading "No VA display found".
+            # Resource domain is devic.es, NOT squat.ai (upstream renamed it).
+            devic.es/dri: 1
         startupProbe:
           httpGet:
             path: /health
@@ -92,8 +100,6 @@ spec:
         - name: media
           mountPath: /media
           readOnly: true
-        - name: dri
-          mountPath: /dev/dri
       volumes:
       - name: media
         persistentVolumeClaim:
@@ -109,7 +115,8 @@ spec:
       # an allocation change, not an upgrade — ROCm does not support gfx1032, so the AMD
       # cannot do the ML work and the NVIDIA therefore has to be the one freed.
       # See /etc/nixos/amd-transcode.nix on ripnix.
-      - name: dri
-        hostPath:
-          path: /dev/dri
-          type: Directory
+      #
+      # No hostPath for /dev/dri: the devic.es/dri resource request above makes
+      # generic-device-plugin inject renderD129 into the container itself, which is both
+      # the permission grant AND the device node. A hostPath mount would be redundant and
+      # would additionally trip PodSecurity's "restricted volume type" rule.
