@@ -71,7 +71,7 @@ spec:
         - name: FIREWALL_OUTBOUND_SUBNETS
           value: {{ .Values.vpn.localSubnets | quote }}
         - name: FIREWALL_INPUT_PORTS
-          value: "5055,8989,7878,9091,51413,9696,6767,8080,11011"
+          value: "5055,8989,7878,9091,51413,9696,6767,8080,11011,3000"
         volumeMounts:
         - name: vpn-key
           mountPath: /etc/vpn/mull.key
@@ -266,6 +266,19 @@ spec:
             export HOMEPAGE_VAR_TR_PASS={{ .Values.transmission.password | quote }}
             exec /usr/local/bin/node server.js
         env:
+        # Next.js standalone binds process.env.HOSTNAME, which defaults to the
+        # IPv6 wildcard "::". The node has IPv6 disabled (ipv6.disable=1 in
+        # boot.kernelParams), so that listen() fails with EAFNOSUPPORT (errno -97)
+        # and the container crashloops.
+        #
+        # That single failure took down the WHOLE arr stack: one NotReady
+        # container makes the pod NotReady, and Kubernetes then drops the pod from
+        # the endpoints of EVERY service in it -- transmission, overseerr, sonarr,
+        # radarr and prowlarr all had empty endpoints and their NodePorts refused
+        # connections, while the applications themselves were healthy and
+        # answering fine on the pod IP directly.
+        - name: HOSTNAME
+          value: "0.0.0.0"
         - name: HOMEPAGE_ALLOWED_HOSTS
           value: "*"
         - name: SAFE_MODE
